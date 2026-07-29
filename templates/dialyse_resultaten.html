@@ -1,0 +1,1514 @@
+{% set actieve_pagina = 'dialyse-resultaten' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dialyse Staalname Resultaten</title>
+<style>
+  :root {
+    --bg:     #f0f2f7;
+    --panel:  #ffffff;
+    --border: #d0d5e0;
+    --text:   #1a1f2e;
+    --muted:  #6070a0;
+    --accent: #1a6bdd;
+    --green:  #1a9e4a;
+    --red:    #cc2200;
+    --yellow: #c49500;
+    --orange: #d46000;
+    --mono:   'Trebuchet MS', sans-serif;
+    --sans:   'Trebuchet MS', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; padding-bottom: 80px; }
+
+  /* ── Header ── */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-badge { background: var(--accent); color: #fff; font-family: var(--mono); font-size: 11px; letter-spacing: 2px; padding: 5px 10px; border-radius: 3px; }
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+  .header-nav a { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; margin-left: 18px; }
+  .header-nav a:hover { color: var(--accent); }
+
+  /* ── Layout ── */
+  .main { padding: 24px 28px; max-width: 1400px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+  .tab { font-family: var(--mono); font-size: 13px; padding: 10px 20px; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tabpanel { display: none; }
+  .tabpanel.active { display: block; }
+
+  /* ── Card ── */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: #e8ecf4; flex-wrap: wrap; gap: 8px; }
+  .card-title { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--text); }
+
+  /* ── Tabel ── */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead tr { background: #e2e6f0; }
+  th { padding: 10px 14px; text-align: left; font-family: var(--mono); font-size: 12px; letter-spacing: 1px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #e0e4ef; transition: background .1s; }
+  tbody tr:hover { background: #f5f7fc; }
+  td { padding: 10px 14px; vertical-align: middle; }
+
+  /* ── Checkbox ── */
+  .cb-wrap { display: flex; align-items: center; justify-content: center; }
+  input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+
+  /* ── Badges ── */
+  .badge { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 3px; display: inline-block; font-weight: 700; white-space: nowrap; }
+  .badge-inuitv   { background: #d4f8d4; color: #1a6b1a; }
+  .badge-uitgev   { background: #d0eaff; color: #1a4488; }
+  .badge-ok       { background: #d4f8d4; color: #1a6b1a; }
+  .badge-nok      { background: #ffe0dd; color: #aa2200; }
+  .badge-nvt      { background: #e8ecf4; color: var(--muted); }
+  .badge-wacht    { background: #e8ecf4; color: var(--muted); }
+  .badge-fout     { background: #ffe0dd; color: #aa2200; }
+  .badge-verzonden { background: #c8f8e0; color: #0a6030; }
+  .badge-reeds    { background: #fff3cc; color: #7a5800; }
+
+  /* ── Knoppen ── */
+  .btn { font-family: var(--mono); font-size: 13px; padding: 9px 18px; border-radius: 4px; cursor: pointer; border: none; transition: opacity .15s; font-weight: 700; letter-spacing: .5px; }
+  .btn-primary  { background: var(--accent); color: #fff; }
+  .btn-primary:hover  { opacity: .85; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-success  { background: var(--green); color: #fff; }
+  .btn-success:hover  { opacity: .85; }
+  .btn-success:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-danger   { background: var(--red); color: #fff; }
+  .btn-danger:hover   { opacity: .85; }
+  .btn-warning  { background: var(--yellow); color: #fff; }
+  .btn-warning:hover  { opacity: .85; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Actie-balk ── */
+  .actie-balk { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #eef2ff; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .actie-info { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 700; }
+
+  /* ── Voortgang ── */
+  .progress-wrap { padding: 18px; }
+  .progress-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .progress-item:last-child { border-bottom: none; }
+  .progress-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-details { margin-left: auto; font-family: var(--mono); font-size: 12px; text-align: right; }
+
+  /* ── Invoer-sectie ── */
+  .input-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; padding: 18px; }
+  .input-group label { display: block; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 5px; letter-spacing: 1px; }
+  .input-group input, .input-group select, .input-group textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px;
+    font-family: var(--mono); font-size: 13px; background: var(--panel); color: var(--text);
+  }
+  .input-group input:focus, .input-group select:focus { outline: none; border-color: var(--accent); }
+
+  /* ── Upload zone ── */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 6px; padding: 32px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; margin: 18px; }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: #f0f4ff; }
+  .upload-zone-icon { font-size: 32px; margin-bottom: 8px; }
+  .upload-zone-text { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+  .upload-zone-hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  #excel-file-input { display: none; }
+
+  /* ── Statistieken ── */
+  .stats-row { display: flex; gap: 16px; padding: 14px 18px; flex-wrap: wrap; }
+  .stat { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 10px 16px; text-align: center; min-width: 80px; }
+  .stat-val { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 1px; margin-top: 2px; }
+
+  /* ── WO link ── */
+  .wo-link { color: var(--accent); text-decoration: none; font-family: var(--mono); font-size: 12px; }
+  .wo-link:hover { text-decoration: underline; }
+
+  /* ══════════════════════════════════════════════
+     DEBUG PANEL (identiek aan thuisdialyse.html)
+  ══════════════════════════════════════════════ */
+  .debug-panel { position: fixed; bottom: 36px; left: 0; right: 0; height: 280px; background: #0d1117; border-top: 2px solid #1e3050; z-index: 200; display: none; flex-direction: column; font-family: var(--mono); }
+  .debug-panel.open { display: flex; }
+  .debug-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 14px; background: #0a0e16; border-bottom: 1px solid #1e3050; color: #4a6090; font-size: 11px; letter-spacing: 1px; flex-shrink: 0; }
+  .debug-panel-header-right { display: flex; align-items: center; gap: 12px; }
+  .debug-clear-btn { background: none; border: 1px solid #1e3050; color: #3a5070; padding: 2px 8px; font-family: var(--mono); font-size: 10px; cursor: pointer; border-radius: 2px; }
+  .debug-clear-btn:hover { border-color: var(--red); color: var(--red); }
+  .debug-log { flex: 1; overflow-y: auto; padding: 8px 14px; }
+  .debug-log::-webkit-scrollbar { width: 6px; }
+  .debug-log::-webkit-scrollbar-track { background: #0d1117; }
+  .debug-log::-webkit-scrollbar-thumb { background: #2a3a5a; border-radius: 3px; }
+  .debug-line { display: flex; gap: 8px; padding: 2px 0; font-size: 12px; line-height: 1.5; border-bottom: 1px solid #0e1620; }
+  .debug-ts   { color: #2a4060; flex-shrink: 0; }
+  .debug-icon { flex-shrink: 0; width: 16px; text-align: center; }
+  .debug-msg  { color: #8090b0; word-break: break-all; }
+  .debug-msg.ok    { color: #4ade80; }
+  .debug-msg.fout  { color: #f87171; }
+  .debug-msg.info  { color: #60a8f0; }
+  .debug-msg.warn  { color: #fbbf24; }
+  .debug-toggle-bar { position: fixed; bottom: 0; left: 0; right: 0; height: 36px; background: #0a0e16; border-top: 1px solid #1e3050; display: flex; align-items: center; gap: 10px; padding: 0 14px; z-index: 201; font-family: var(--mono); font-size: 12px; }
+  .debug-label { color: #2a4060; font-size: 10px; letter-spacing: 2px; }
+  .debug-toggle-btn { background: none; border: 1px solid #1e3050; color: #3a5070; padding: 3px 10px; font-family: var(--mono); font-size: 11px; cursor: pointer; border-radius: 2px; }
+  .debug-toggle-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .tgl-wrap { display:flex; align-items:center; gap:6px; margin-left:16px; }
+  .tgl-label { font-family:var(--mono); font-size:11px; color:#3a5070; }
+  .tgl { position:relative; width:32px; height:17px; }
+  .tgl input { opacity:0; width:0; height:0; }
+  .tgl-slider { position:absolute; inset:0; background:#1e3050; border-radius:17px; cursor:pointer; transition:.2s; }
+  .tgl-slider:before { content:''; position:absolute; width:11px; height:11px; left:3px; bottom:3px; background:#3a5070; border-radius:50%; transition:.2s; }
+  .tgl input:checked + .tgl-slider { background:var(--accent); }
+  .tgl input:checked + .tgl-slider:before { background:#fff; transform:translateX(15px); }
+  .debug-last-msg { color: #3a5070; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .debug-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4a6a; flex-shrink: 0; }
+  .debug-status-dot.running { background: #f5a623; animation: pulse 1s ease-in-out infinite; }
+  .debug-status-dot.ok   { background: var(--green); }
+  .debug-status-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="/assets/image.png" alt="UZ Leuven" style="height:36px;width:auto;">
+    <h1>DIALYSE STAALNAME RESULTATEN</h1>
+  </div>
+  <nav class="header-nav" style="display:flex;gap:8px;flex-wrap:wrap">
+    {% include "_nav.html" %}
+  </nav>
+</header>
+
+<div class="main">
+
+  <!-- ── Tabs ── -->
+  <div class="tabs">
+    <button class="tab active" onclick="toonTab('tab-stalen', this)">📋 TD STALEN</button>
+    <button class="tab" onclick="toonTab('tab-invoer', this)">➕ TD INVOER</button>
+    <button class="tab" onclick="toonTab('tab-voortgang', this)">⚡ VOORTGANG</button>
+    <button class="tab" onclick="toonTab('tab-geschiedenis', this)">📜 GESCHIEDENIS</button>
+    <span style="width:2px;background:var(--border);margin:6px 4px"></span>
+    <button class="tab" onclick="toonTab('tab-ro-stalen', this)">🔵 RO STALEN</button>
+    <button class="tab" onclick="toonTab('tab-ro-invoer', this)">➕ RO INVOER</button>
+    <button class="tab" onclick="toonTab('tab-ro-geschiedenis', this)">📜 RO GESCHIEDENIS</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB 1: STALEN OVERZICHT
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-stalen" class="tabpanel active">
+
+    <!-- Statistieken -->
+    <div class="card">
+      <div class="stats-row" id="stats-row">
+        <div class="stat"><div class="stat-val" id="stat-totaal">0</div><div class="stat-lbl">TOTAAL</div></div>
+        <div class="stat"><div class="stat-val" id="stat-inuitv" style="color:var(--green)">0</div><div class="stat-lbl">INUITV</div></div>
+        <div class="stat"><div class="stat-val" id="stat-nvt" style="color:var(--muted)">0</div><div class="stat-lbl">GEEN WO</div></div>
+        <div class="stat"><div class="stat-val" id="stat-verzonden" style="color:var(--accent)">0</div><div class="stat-lbl">VERZONDEN</div></div>
+        <div class="stat"><div class="stat-val" id="stat-fout" style="color:var(--red)">0</div><div class="stat-lbl">FOUT</div></div>
+      </div>
+    </div>
+
+    <!-- Drag & drop Excel direct op stalen overzicht -->
+    <div class="card" id="stalen-dropzone"
+         ondragover="stalenDragOver(event)"
+         ondragleave="stalenDragLeave(event)"
+         ondrop="stalenDrop(event)"
+         style="border:2px dashed var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:default;transition:border-color .15s,background .15s">
+      <span style="font-size:22px">📂</span>
+      <span style="font-family:var(--mono);font-size:13px;color:var(--muted)">Sleep een Excel-bestand hierop om stalen te importeren</span>
+      <span id="stalen-drop-status" style="margin-left:auto;font-family:var(--mono);font-size:12px"></span>
+    </div>
+
+    <!-- Tabel -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">STALEN LIJST</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="selecteerAlleInuitv()">✓ Alle INUITV</button>
+          <button class="btn btn-outline btn-sm" onclick="deselecteerAlles()">✗ Deselecteer</button>
+          <button class="btn btn-primary btn-sm" onclick="woOpzoeken()" id="btn-opzoeken">🔍 WO OPZOEKEN</button>
+          <button class="btn btn-success btn-sm" onclick="verzendSelectie()" id="btn-verzenden">▶ RESULTATEN VERZENDEN</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="cb-alles" onchange="toggleAlles(this)"></th>
+              <th>DATUM STAAL</th>
+              <th>EENHEID</th>
+              <th>DETAIL</th>
+              <th>MAXIMO</th>
+              <th>KIEMGETAL CFU/ml</th>
+              <th>ENDOTOXINE IU/ml</th>
+              <th>WO-NUMMER</th>
+              <th>STATUS</th>
+              <th>RESULTAAT</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="stalen-tbody">
+            <tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px">
+              Geen stalen geladen — importeer een Excel-bestand of voeg stalen handmatig toe
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actie-balk" id="actie-balk" style="display:none">
+        <span class="actie-info" id="actie-info">0 geselecteerd</span>
+        <button class="btn btn-primary btn-sm" onclick="woOpzoekenSelectie()">🔍 WO opzoeken voor selectie</button>
+        <button class="btn btn-success btn-sm" onclick="verzendSelectie()">▶ Verzenden</button>
+        <button class="btn btn-danger btn-sm" onclick="verwijderSelectie()">🗑 Verwijderen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB 2: INVOER / IMPORT
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-invoer" class="tabpanel">
+
+    <!-- Excel import -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📂 EXCEL IMPORTEREN (laboratoriumverslag)</span></div>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('excel-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <div class="upload-zone-icon">📊</div>
+        <div class="upload-zone-text">Klik of sleep een Excel-bestand hier naartoe</div>
+        <div class="upload-zone-hint">Onderzoeksverslag waterstalen – Dialyse – Homedialyse (.xlsx / .xls)</div>
+      </div>
+      <input type="file" id="excel-file-input" accept=".xlsx,.xls,.xlsm" onchange="uploadExcel(this.files[0])">
+      <div id="upload-status" style="padding:12px 18px;font-family:var(--mono);font-size:13px;display:none"></div>
+    </div>
+
+    <!-- PDF import (Fresenius analyseverslag Geniustoestel) -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">📄 PDF IMPORTEREN (Fresenius analyseverslag — Genius)</span></div>
+      <div class="upload-zone" id="pdf-upload-zone" onclick="document.getElementById('pdf-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handlePdfDrop(event)">
+        <div class="upload-zone-icon">📄</div>
+        <div class="upload-zone-text">Klik of sleep één of meerdere PDF-analyseverslagen hier naartoe</div>
+        <div class="upload-zone-hint">T-nummer wordt automatisch opgezocht via roepnaam (bv. G06) + WO + bijlage</div>
+      </div>
+      <input type="file" id="pdf-file-input" accept=".pdf" multiple onchange="uploadPdf(this.files)">
+      <div id="pdf-upload-status" style="padding:12px 18px;font-family:var(--mono);font-size:13px;display:none"></div>
+
+      <div id="pdf-stalen-lijst" style="padding:0 18px 18px;display:none">
+        <table style="width:100%;font-family:var(--mono);font-size:12px;border-collapse:collapse">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid var(--border)">
+              <th style="padding:4px 8px">Bestand</th>
+              <th style="padding:4px 8px">Datum</th>
+              <th style="padding:4px 8px">Roepnaam</th>
+              <th style="padding:4px 8px">Kiemgetal</th>
+              <th style="padding:4px 8px">Endotoxine</th>
+              <th style="padding:4px 8px">Aangevinkt</th>
+            </tr>
+          </thead>
+          <tbody id="pdf-stalen-tbody"></tbody>
+        </table>
+        <button class="btn" style="margin-top:10px" onclick="verwerkPdfStalen()">
+          🔎 T-nummer + WO opzoeken voor deze PDF's
+        </button>
+      </div>
+      <div id="pdf-verwerk-status" style="padding:0 18px 18px;font-family:var(--mono);font-size:13px;display:none"></div>
+    </div>
+
+    <!-- Handmatig invoer -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">✏️ HANDMATIG STAAL TOEVOEGEN</span>
+      </div>
+      <div class="input-grid">
+        <div class="input-group">
+          <label>DATUM STAALNAME (dd/mm/yyyy)</label>
+          <input type="text" id="inv-datum" placeholder="18/05/2026">
+        </div>
+        <div class="input-group">
+          <label>EENHEID</label>
+          <input type="text" id="inv-eenheid" placeholder="NIER 2">
+        </div>
+        <div class="input-group">
+          <label>STAALNAME DETAIL</label>
+          <input type="text" id="inv-detail" placeholder="toestel TD51">
+        </div>
+        <div class="input-group">
+          <label>MAXIMO (T-nummer)</label>
+          <input type="text" id="inv-maximo" placeholder="T301943">
+        </div>
+        <div class="input-group">
+          <label>KIEMGETAL CFU/ml</label>
+          <input type="text" id="inv-kiemgetal" placeholder="0">
+        </div>
+        <div class="input-group">
+          <label>ENDOTOXINE IU/ml</label>
+          <input type="text" id="inv-endotoxine" placeholder="&lt;0,125">
+        </div>
+        <div class="input-group">
+          <label>COMMENTAAR LABO (* = geen)</label>
+          <input type="text" id="inv-commentaar" placeholder="*" value="*">
+        </div>
+      </div>
+      <div style="padding:0 18px 18px">
+        <button class="btn btn-primary" onclick="handmatigToevoegen()">➕ Toevoegen</button>
+        <span id="inv-status" style="margin-left:14px;font-family:var(--mono);font-size:13px"></span>
+      </div>
+    </div>
+
+    <!-- Beheer -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">⚙ BEHEER</span></div>
+      <div style="padding:18px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-danger btn-sm" onclick="allesWissen()">🗑 Alle stalen wissen</button>
+        <button class="btn btn-outline btn-sm" onclick="laadData()">🔄 Herladen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB 3: VOORTGANG
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-voortgang" class="tabpanel">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title" id="voortgang-titel">VOORTGANG</span>
+        <span id="voortgang-status" style="font-family:var(--mono);font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="progress-wrap" id="voortgang-wrap">
+        <div style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px">
+          Geen actieve job — start WO opzoeken of resultaten verzenden
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB 4: GESCHIEDENIS
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-geschiedenis" class="tabpanel">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">VERZENDGESCHIEDENIS</span>
+        <button class="btn btn-danger btn-sm" onclick="wisGeschiedenis()">🗑 Wissen</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>TIJDSTIP</th>
+              <th>DATUM STAAL</th>
+              <th>MAXIMO</th>
+              <th>EENHEID</th>
+              <th>WO-NUMMER</th>
+              <th>STATUS</th>
+              <th>MELDING</th>
+            </tr>
+          </thead>
+          <tbody id="geschiedenis-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen geschiedenis</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- .main -->
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB RO-1: RO STALEN OVERZICHT
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-ro-stalen" class="tabpanel">
+
+    <div class="card">
+      <div class="stats-row" id="ro-stats-row">
+        <div class="stat"><div class="stat-val" id="ro-stat-totaal">0</div><div class="stat-lbl">TOTAAL</div></div>
+        <div class="stat"><div class="stat-val" id="ro-stat-inuitv" style="color:var(--green)">0</div><div class="stat-lbl">INUITV</div></div>
+        <div class="stat"><div class="stat-val" id="ro-stat-nvt" style="color:var(--muted)">0</div><div class="stat-lbl">GEEN WO</div></div>
+        <div class="stat"><div class="stat-val" id="ro-stat-verzonden" style="color:var(--accent)">0</div><div class="stat-lbl">VERZONDEN</div></div>
+        <div class="stat"><div class="stat-val" id="ro-stat-fout" style="color:var(--red)">0</div><div class="stat-lbl">FOUT</div></div>
+      </div>
+    </div>
+
+    <div class="card" id="ro-stalen-dropzone"
+         ondragover="roDragOver(event)" ondragleave="roDragLeave(event)" ondrop="roDrop(event)"
+         style="border:2px dashed var(--border);padding:14px 20px;display:flex;align-items:center;gap:12px;cursor:default;transition:border-color .15s,background .15s">
+      <span style="font-size:22px">📂</span>
+      <span style="font-family:var(--mono);font-size:13px;color:var(--muted)">Sleep RO Excel-bestand hierop om stalen te importeren</span>
+      <span id="ro-drop-status" style="margin-left:auto;font-family:var(--mono);font-size:12px"></span>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">RO STALEN LIJST</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="roSelecteerAlleInuitv()">✓ Alle INUITV</button>
+          <button class="btn btn-outline btn-sm" onclick="roDeselecteerAlles()">✗ Deselecteer</button>
+          <button class="btn btn-primary btn-sm" onclick="roWoOpzoeken()" id="ro-btn-opzoeken">🔍 WO OPZOEKEN</button>
+          <button class="btn btn-success btn-sm" onclick="roVerzendSelectie()" id="ro-btn-verzenden">▶ RESULTATEN VERZENDEN</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="ro-cb-alles" onchange="roToggleAlles(this)"></th>
+              <th>DATUM STAAL</th>
+              <th>EENHEID</th>
+              <th>LOCATIE</th>
+              <th>MAXIMO</th>
+              <th>KIEM BEGIN</th>
+              <th>ENDO BEGIN</th>
+              <th>KIEM EINDE</th>
+              <th>ENDO EINDE</th>
+              <th>WO-NUMMER</th>
+              <th>STATUS</th>
+              <th>RESULTAAT</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ro-stalen-tbody">
+            <tr><td colspan="13" style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px">
+              Geen stalen geladen — importeer een RO Excel-bestand
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actie-balk" id="ro-actie-balk" style="display:none">
+        <span class="actie-info" id="ro-actie-info">0 geselecteerd</span>
+        <button class="btn btn-primary btn-sm" onclick="roWoOpzoekenSelectie()">🔍 WO opzoeken voor selectie</button>
+        <button class="btn btn-success btn-sm" onclick="roVerzendSelectie()">▶ Verzenden</button>
+        <button class="btn btn-danger btn-sm" onclick="roVerwijderSelectie()">🗑 Verwijderen</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB RO-2: RO INVOER / IMPORT
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-ro-invoer" class="tabpanel">
+    <div class="card">
+      <div class="card-header"><span class="card-title">EXCEL IMPORTEREN</span></div>
+      <div style="padding:8px 0">
+        <p style="font-family:var(--mono);font-size:13px;color:var(--muted);margin-bottom:16px">
+          Importeer het labo-Excel "Onderzoeksverslag waterstalen – Ringleiding".<br>
+          De twee rijen per installatie (begin + einde) worden automatisch samengevoegd.
+        </p>
+        <label class="btn btn-outline" style="cursor:pointer">
+          📂 Excel kiezen
+          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="roUploadExcel(this)">
+        </label>
+        <span id="ro-upload-status" style="margin-left:12px;font-family:var(--mono);font-size:13px"></span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">RO STALEN BEHEER</span>
+        <button class="btn btn-danger btn-sm" onclick="roAllesWissen()">🗑 Alles wissen</button>
+      </div>
+      <p style="font-family:var(--mono);font-size:13px;color:var(--muted)">
+        Gebruik het RO Stalen tabblad om stalen te beheren en te verzenden.
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════
+       TAB RO-3: RO GESCHIEDENIS
+  ══════════════════════════════════════════════════════ -->
+  <div id="tab-ro-geschiedenis" class="tabpanel">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">RO VERZENDGESCHIEDENIS</span>
+        <button class="btn btn-danger btn-sm" onclick="roWisGeschiedenis()">🗑 Wissen</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>TIJDSTIP</th>
+              <th>DATUM STAAL</th>
+              <th>MAXIMO</th>
+              <th>EENHEID</th>
+              <th>WO-NUMMER</th>
+              <th>STATUS</th>
+              <th>MELDING</th>
+            </tr>
+          </thead>
+          <tbody id="ro-geschiedenis-tbody">
+            <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen geschiedenis</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- einde tweede .main -->
+
+<!-- ══════════════════════════════════════════════════════
+     DEBUG LOG PANEL
+══════════════════════════════════════════════════════ -->
+<div class="debug-panel" id="debug-panel">
+  <div class="debug-panel-header">
+    <span>⬛ DEBUG LOG — STAALNAME VERWERKING</span>
+    <div class="debug-panel-header-right">
+      <span style="color:#60a8f0;font-size:10px">ℹ INFO</span>
+      <span style="color:#4ade80;font-size:10px">✓ OK</span>
+      <span style="color:#f87171;font-size:10px">✕ FOUT</span>
+      <span style="color:#fbbf24;font-size:10px">⚠ WARN</span>
+      <span id="debug-entry-count" style="color:#3a5080;margin-left:8px">0 berichten</span>
+      <button class="debug-clear-btn" onclick="debugWis()">✕ Wissen</button>
+    </div>
+  </div>
+  <div class="debug-log" id="debug-log">
+    <div style="color:#2a3a5a;font-family:var(--mono);font-size:12px;padding:24px 0;text-align:center">
+      Debug log is leeg — start WO opzoeken of resultaten verzenden
+    </div>
+  </div>
+</div>
+<div class="debug-toggle-bar">
+  <div class="debug-status-dot" id="debug-dot"></div>
+  <span class="debug-label">LOG</span>
+  <button class="debug-toggle-btn" id="debug-toggle-btn" onclick="debugToggle()">▲ TOON LOG</button>
+  <span class="debug-last-msg" id="debug-last-msg">Geen actieve verwerking</span>
+  <div class="tgl-wrap" title="Debug log paneel tonen/verbergen">
+    <span class="tgl-label">LOG</span>
+    <label class="tgl">
+      <input type="checkbox" id="tgl-log" onchange="debugToggleViaSwitch(this.checked)">
+      <span class="tgl-slider"></span>
+    </label>
+  </div>
+  <div class="tgl-wrap" title="Browser zichtbaar of headless">
+    <span class="tgl-label">HEADLESS</span>
+    <label class="tgl">
+      <input type="checkbox" id="tgl-headless" onchange="setHeadless(this.checked)">
+      <span class="tgl-slider"></span>
+    </label>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════
+let alleStalen   = [];
+let geselecteerd = new Set(); // "maximo|datum"
+let huidigeJob   = null;
+let pollingTimer = null;
+
+// ═══════════════════════════════════════════════════════════
+// Debug log
+// ═══════════════════════════════════════════════════════════
+let debugOpen    = false;
+let debugEntries = [];
+
+function debugLog(msg, type = 'info') {
+  const ts = new Date().toLocaleTimeString('nl-BE', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  debugEntries.push({ ts, msg, type });
+
+  const logEl = document.getElementById('debug-log');
+  if (debugEntries.length === 1) logEl.innerHTML = '';
+
+  const icons = { info: 'ℹ', ok: '✓', fout: '✕', warn: '⚠' };
+  const div   = document.createElement('div');
+  div.className = 'debug-line';
+  div.innerHTML = `
+    <span class="debug-ts">${ts}</span>
+    <span class="debug-icon">${icons[type] || 'ℹ'}</span>
+    <span class="debug-msg ${type}">${escHtml(msg)}</span>`;
+  logEl.appendChild(div);
+  logEl.scrollTop = logEl.scrollHeight;
+
+  document.getElementById('debug-entry-count').textContent = `${debugEntries.length} berichten`;
+  document.getElementById('debug-last-msg').textContent = msg;
+}
+
+function debugWis() {
+  debugEntries = [];
+  document.getElementById('debug-log').innerHTML =
+    '<div style="color:#2a3a5a;font-family:var(--mono);font-size:12px;padding:24px 0;text-align:center">Log gewist</div>';
+  document.getElementById('debug-entry-count').textContent = '0 berichten';
+}
+
+function debugToggleViaSwitch(open) {
+  debugOpen = open;
+  document.getElementById('debug-panel').classList.toggle('open', debugOpen);
+  document.getElementById('debug-toggle-btn').textContent = debugOpen ? '▼ VERBERG LOG' : '▲ TOON LOG';
+}
+
+async function setHeadless(val) {
+  await fetch('/api/dialyse-resultaten/headless', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({headless: val})
+  });
+}
+
+function debugToggle() {
+  debugOpen = !debugOpen;
+  document.getElementById('debug-panel').classList.toggle('open', debugOpen);
+  document.getElementById('debug-toggle-btn').textContent = debugOpen ? '▼ VERBERG LOG' : '▲ TOON LOG';
+}
+
+function debugSetStatus(s) {
+  const dot = document.getElementById('debug-dot');
+  dot.className = 'debug-status-dot' + (s !== 'idle' ? ' ' + s : '');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Tabs
+// ═══════════════════════════════════════════════════════════
+function toonTab(id, btn) {
+  document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Helpers
+// ═══════════════════════════════════════════════════════════
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sleutel(s) { return s.maximo + '|' + s.datum; }
+
+function statusBadge(status, melding) {
+  if (!status) return '<span class="badge badge-wacht">—</span>';
+  const m = {
+    INUITV:        'badge-inuitv',
+    UITGEV:        'badge-uitgev',
+    nvt:           'badge-nvt',
+    reeds_ingevuld:'badge-reeds',
+  };
+  const cls = m[status] || 'badge-wacht';
+  const lbl = status === 'reeds_ingevuld' ? 'REEDS INGEVULD' : status.toUpperCase();
+  return `<span class="badge ${cls}" title="${escHtml(melding||'')}"> ${lbl}</span>`;
+}
+
+function resultaatBadge(s) {
+  if (s.melding === 'Resultaten succesvol verzonden')
+    return '<span class="badge badge-verzonden">✓ VERZONDEN</span>';
+  if (s.melding === 'Reeds ingevuld, overgeslaan')
+    return '<span class="badge badge-reeds">↷ OVERGESLAAN</span>';
+  if (s.ok === false && s.fout)
+    return `<span class="badge badge-fout" title="${escHtml(s.fout)}">✕ FOUT</span>`;
+  if (s.wo_id && s.wo_id !== 'nvt')
+    return '<span class="badge badge-wacht">WACHT</span>';
+  return '';
+}
+
+function kiemBadge(val) {
+  try {
+    const n = parseFloat(String(val).replace(',','.'));
+    if (isNaN(n)) return escHtml(val);
+    const ok = n < 100;
+    return `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}; font-weight:700; font-family:var(--mono)">${escHtml(val)}</span>`;
+  } catch { return escHtml(val); }
+}
+
+function endoBadge(val) {
+  const ok = val.includes('<');
+  return `<span style="color:${ok ? 'var(--green)' : 'var(--red)'}; font-weight:700; font-family:var(--mono)">${escHtml(val)}</span>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// Data laden
+// ═══════════════════════════════════════════════════════════
+async function laadData() {
+  const res  = await fetch('/api/dialyse-resultaten?_=' + Date.now());
+  const data = await res.json();
+  alleStalen = data.stalen || [];
+  renderTabel();
+  renderStats();
+  renderGeschiedenis(data.geschiedenis || []);
+}
+
+function renderStats() {
+  const totaal    = alleStalen.length;
+  const inuitv    = alleStalen.filter(s => s.status === 'INUITV').length;
+  const nvt       = alleStalen.filter(s => !s.wo_id || s.wo_id === 'nvt').length;
+  const verzonden = alleStalen.filter(s => s.melding === 'Resultaten succesvol verzonden').length;
+  const fout      = alleStalen.filter(s => s.ok === false && s.fout && s.melding !== 'Reeds ingevuld, overgeslaan').length;
+  document.getElementById('stat-totaal').textContent    = totaal;
+  document.getElementById('stat-inuitv').textContent    = inuitv;
+  document.getElementById('stat-nvt').textContent       = nvt;
+  document.getElementById('stat-verzonden').textContent = verzonden;
+  document.getElementById('stat-fout').textContent      = fout;
+}
+
+function renderTabel() {
+  const tbody = document.getElementById('stalen-tbody');
+  if (alleStalen.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen stalen geladen</td></tr>';
+    document.getElementById('actie-balk').style.display = 'none';
+    return;
+  }
+
+  tbody.innerHTML = alleStalen.map(s => {
+    const k      = sleutel(s);
+    const gecbx  = geselecteerd.has(k);
+    const woLink = (s.wo_id && s.wo_id !== 'nvt')
+      ? `<a class="wo-link" href="#" onclick="openWO('${s.wo_id}');return false">${escHtml(s.wo_id)}</a>`
+      : (s.wo_id === 'nvt' ? '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">—</span>' : '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">niet opgezocht</span>');
+
+    return `<tr>
+      <td class="cb-wrap"><input type="checkbox" ${gecbx ? 'checked' : ''} onchange="toggleRij('${k}', this)"></td>
+      <td style="font-family:var(--mono);font-size:12px">${escHtml(s.datum||'')}</td>
+      <td>${escHtml(s.eenheid||'')}</td>
+      <td style="font-size:13px;color:var(--muted)">${escHtml(s.detail||'')}</td>
+      <td style="font-family:var(--mono);font-weight:700">${escHtml(s.maximo||'')}</td>
+      <td>${kiemBadge(s.kiemgetal||'0')}</td>
+      <td>${endoBadge(s.endotoxine||'')}</td>
+      <td>${woLink}</td>
+      <td>${statusBadge(s.status, s.fout)}</td>
+      <td>${resultaatBadge(s)}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="verwijderStaal('${escHtml(s.maximo)}','${escHtml(s.datum)}')">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  // Actie-balk
+  const n = geselecteerd.size;
+  document.getElementById('actie-balk').style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('actie-info').textContent   = `${n} geselecteerd`;
+}
+
+function renderGeschiedenis(lijst) {
+  const tbody = document.getElementById('geschiedenis-tbody');
+  if (!lijst || lijst.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen geschiedenis</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...lijst].reverse().map(g => {
+    const okCls = g.ok ? 'badge-verzonden' : 'badge-fout';
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:12px">${escHtml(g.datum_actie||'')}</td>
+      <td style="font-family:var(--mono);font-size:12px">${escHtml(g.datum_staal||'')}</td>
+      <td style="font-family:var(--mono);font-weight:700">${escHtml(g.maximo||'')}</td>
+      <td>${escHtml(g.eenheid||'')}</td>
+      <td style="font-family:var(--mono)">${g.wo_id && g.wo_id !== "nvt" ? `<a class="wo-link" href="#" onclick="openWO('${g.wo_id}');return false">${escHtml(g.wo_id)}</a>` : escHtml(g.wo_id||'—')}</td>
+      <td>${statusBadge(g.status, '')}</td>
+      <td><span class="badge ${okCls}">${escHtml(g.melding||'')}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Selectie
+// ═══════════════════════════════════════════════════════════
+function toggleRij(k, cb) {
+  if (cb.checked) geselecteerd.add(k);
+  else geselecteerd.delete(k);
+  renderTabel();
+}
+
+function toggleAlles(cb) {
+  if (cb.checked) alleStalen.forEach(s => geselecteerd.add(sleutel(s)));
+  else geselecteerd.clear();
+  renderTabel();
+}
+
+function selecteerAlleInuitv() {
+  alleStalen.filter(s => s.status === 'INUITV').forEach(s => geselecteerd.add(sleutel(s)));
+  renderTabel();
+}
+
+function deselecteerAlles() {
+  geselecteerd.clear();
+  renderTabel();
+}
+
+// ═══════════════════════════════════════════════════════════
+// Excel upload
+// ═══════════════════════════════════════════════════════════
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) uploadExcel(file);
+}
+
+async function uploadExcel(file) {
+  if (!file) return;
+  const statusEl = document.getElementById('upload-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color   = 'var(--muted)';
+  statusEl.textContent   = `⏳ Bezig met importeren van '${file.name}'...`;
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res  = await fetch('/api/dialyse-resultaten/upload-excel', {method:'POST', body: formData});
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✓ ${data.aangeleverd} staal/stalen succesvol geladen`;
+      await laadData();
+      toonTab('tab-stalen', document.querySelectorAll('.tab')[0]);
+    } else {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = `✕ Fout: ${data.fout}`;
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `✕ Netwerkfout: ${e}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// PDF upload (Fresenius analyseverslag Genius)
+// ═══════════════════════════════════════════════════════════
+function handlePdfDrop(e) {
+  e.preventDefault();
+  document.getElementById('pdf-upload-zone').classList.remove('drag-over');
+  if (e.dataTransfer.files.length) uploadPdf(e.dataTransfer.files);
+}
+
+async function uploadPdf(files) {
+  if (!files || !files.length) return;
+  const statusEl = document.getElementById('pdf-upload-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color   = 'var(--muted)';
+  statusEl.textContent   = `⏳ Bezig met verwerken van ${files.length} PDF-bestand(en)...`;
+
+  const formData = new FormData();
+  for (const f of files) formData.append('bestanden', f);
+
+  try {
+    const res  = await fetch('/api/dialyse-resultaten/upload-pdf', {method: 'POST', body: formData});
+    const data = await res.json();
+    if (data.ok) {
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = `✓ ${data.toegevoegd} PDF-staal/stalen geparsed` +
+        (data.fouten && data.fouten.length ? ` — ${data.fouten.length} fout(en)` : '');
+      if (data.fouten && data.fouten.length) {
+        statusEl.textContent += '\n' + data.fouten.map(f => `  ✕ ${f.bestandsnaam}: ${f.fout}`).join('\n');
+      }
+      await laadPdfStalen();
+    } else {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = `✕ Fout: ${data.fout}`;
+    }
+  } catch (e) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `✕ Netwerkfout: ${e}`;
+  }
+  document.getElementById('pdf-file-input').value = '';
+}
+
+async function laadPdfStalen() {
+  const res  = await fetch('/api/dialyse-resultaten');
+  const data = await res.json();
+  const stalen = (data.pdf_stalen || []).filter(s => !s._verwerkt);
+  const lijstEl = document.getElementById('pdf-stalen-lijst');
+  const tbody   = document.getElementById('pdf-stalen-tbody');
+
+  if (!stalen.length) {
+    lijstEl.style.display = 'none';
+    return;
+  }
+  lijstEl.style.display = 'block';
+  tbody.innerHTML = stalen.map(s => `
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:4px 8px">${s.bestandsnaam || ''}</td>
+      <td style="padding:4px 8px">${s.datum || '—'}</td>
+      <td style="padding:4px 8px">${s.roepnaam || '—'}</td>
+      <td style="padding:4px 8px">${s.kiemgetal || '—'}</td>
+      <td style="padding:4px 8px">${s.endotoxine || '—'}</td>
+      <td style="padding:4px 8px;font-size:11px">${(s.checked_optie || '—').slice(0, 60)}</td>
+    </tr>
+  `).join('');
+}
+
+async function verwerkPdfStalen() {
+  const statusEl = document.getElementById('pdf-verwerk-status');
+  statusEl.style.display = 'block';
+  statusEl.style.color   = 'var(--muted)';
+  statusEl.textContent   = '⏳ T-nummer + WO opzoeken gestart...';
+
+  try {
+    const res  = await fetch('/api/dialyse-resultaten/pdf-verwerken', {method: 'POST'});
+    const data = await res.json();
+    if (!data.ok) {
+      statusEl.style.color = 'var(--red)';
+      statusEl.textContent = `✕ Fout: ${data.fout}`;
+      return;
+    }
+    const jobId = data.job_id;
+    const poll = setInterval(async () => {
+      const jr = await fetch(`/api/dialyse-resultaten/job/${jobId}`);
+      const job = await jr.json();
+      statusEl.textContent = (job.stap_logs || []).slice(-8).join('\n');
+      if (!job.bezig) {
+        clearInterval(poll);
+        statusEl.style.color = job.fout ? 'var(--red)' : 'var(--green)';
+        if (job.fout) statusEl.textContent += `\n✕ Fout: ${job.fout}`;
+        else statusEl.textContent += '\n✓ Klaar — resultaten staan nu bij de stalen (status INUITV indien gevonden)';
+        await laadData();
+        await laadPdfStalen();
+      }
+    }, 2000);
+  } catch (e) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `✕ Netwerkfout: ${e}`;
+  }
+}
+async function handmatigToevoegen() {
+  const datum      = document.getElementById('inv-datum').value.trim();
+  const eenheid    = document.getElementById('inv-eenheid').value.trim();
+  const detail     = document.getElementById('inv-detail').value.trim();
+  const maximo     = document.getElementById('inv-maximo').value.trim();
+  const kiemgetal  = document.getElementById('inv-kiemgetal').value.trim();
+  const endotoxine = document.getElementById('inv-endotoxine').value.trim();
+  const commentaar = document.getElementById('inv-commentaar').value.trim() || '*';
+  const statusEl   = document.getElementById('inv-status');
+
+  if (!datum || !maximo) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = '✕ Datum en Maximo zijn verplicht';
+    return;
+  }
+
+  const res  = await fetch('/api/dialyse-resultaten/handmatig-toevoegen', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({stalen: [{datum, eenheid, detail, maximo, kiemgetal, endotoxine, commentaar}]})
+  });
+  const data = await res.json();
+  if (data.ok) {
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `✓ Toegevoegd (${data.toegevoegd} nieuw)`;
+    await laadData();
+  } else {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = `✕ ${data.fout}`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// WO Opzoeken
+// ═══════════════════════════════════════════════════════════
+async function woOpzoeken() {
+  startJob('wo-opzoeken', null);
+}
+
+async function woOpzoekenSelectie() {
+  startJob('wo-opzoeken', [...geselecteerd]);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Verzenden
+// ═══════════════════════════════════════════════════════════
+async function verzendSelectie() {
+  const sel = geselecteerd.size > 0 ? [...geselecteerd] : null;
+  startJob('verzenden', sel);
+}
+
+// ═══════════════════════════════════════════════════════════
+// Job starten + pollen
+// ═══════════════════════════════════════════════════════════
+let _vorigeTab = null;  // onthoudt de tab vanwaar job gestart werd
+
+async function startJob(type, selectie) {
+  const isBtnOpzoeken  = document.getElementById('btn-opzoeken');
+  const isBtnVerzenden = document.getElementById('btn-verzenden');
+  isBtnOpzoeken.disabled = isBtnVerzenden.disabled = true;
+
+  // Onthoud huidige actieve tab zodat we erna terug kunnen
+  _vorigeTab = document.querySelector('.tab.active') || null;
+
+  debugSetStatus('running');
+  debugLog(`Job gestart: ${type}`, 'info');
+
+  toonTab('tab-voortgang', document.querySelectorAll('.tab')[2]);
+  document.getElementById('voortgang-wrap').innerHTML =
+    '<div style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px"><div class="spinner" style="margin:0 auto 12px"></div>Job starten...</div>';
+  document.getElementById('voortgang-status').textContent = 'Bezig...';
+  document.getElementById('voortgang-titel').textContent  = type === 'wo-opzoeken' ? '🔍 WO OPZOEKEN' : '▶ RESULTATEN VERZENDEN';
+
+  let url  = type === 'wo-opzoeken' ? '/api/dialyse-resultaten/wo-opzoeken' : '/api/dialyse-resultaten/verzenden';
+  let body = selectie ? JSON.stringify({selectie}) : '{}';
+
+  try {
+    const res  = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body});
+    const data = await res.json();
+    if (!data.ok) {
+      debugLog(`Fout bij starten: ${data.fout}`, 'fout');
+      document.getElementById('voortgang-wrap').innerHTML =
+        `<div style="padding:18px;color:var(--red);font-family:var(--mono)">${escHtml(data.fout)}</div>`;
+      isBtnOpzoeken.disabled = isBtnVerzenden.disabled = false;
+      debugSetStatus('error');
+      return;
+    }
+    debugLog(`Job ID: ${data.job_id}`, 'info');
+    pollJob(data.job_id, 0, type);
+  } catch (e) {
+    debugLog(`Netwerkfout: ${e}`, 'fout');
+    isBtnOpzoeken.disabled = isBtnVerzenden.disabled = false;
+    debugSetStatus('error');
+  }
+}
+
+async function pollJob(job_id, logIndex, type) {
+  let res, data;
+  try {
+    res  = await fetch(`/api/dialyse-resultaten/job/${job_id}?_=${Date.now()}`);
+    data = await res.json();
+  } catch (e) {
+    debugLog(`Poll fout: ${e}`, 'fout');
+    setTimeout(() => pollJob(job_id, logIndex, type), 2000);
+    return;
+  }
+
+  // Verwerk nieuwe logregels
+  const logs = data.stap_logs || [];
+  for (let i = logIndex; i < logs.length; i++) {
+    const raw  = logs[i];
+    const msg  = raw.replace(/^\[\d+:\d+:\d+\]\s*/, '');
+    const type = msg.startsWith('✓') ? 'ok' : msg.startsWith('❌') || msg.startsWith('✕') ? 'fout' : msg.startsWith('⚠') ? 'warn' : 'info';
+    debugLog(msg, type);
+  }
+
+  renderVoortgang(data, type);
+
+  if (data.bezig) {
+    setTimeout(() => pollJob(job_id, logs.length, type), 2000);
+    return;
+  }
+
+  // Job klaar
+  debugSetStatus(data.fout ? 'error' : 'ok');
+  document.getElementById('btn-opzoeken').disabled  = false;
+  document.getElementById('btn-verzenden').disabled = false;
+
+  const ok   = (data.resultaten || []).filter(r => r.ok !== false).length;
+  const fout = (data.resultaten || []).filter(r => r.ok === false).length;
+  document.getElementById('voortgang-status').textContent = `Klaar: ${ok} OK, ${fout} mislukt`;
+  debugLog(`Job klaar: ${ok} OK, ${fout} mislukt`, ok > 0 && fout === 0 ? 'ok' : fout > 0 ? 'warn' : 'info');
+
+  await laadData();
+
+  // Keer terug naar de tab vanwaar de job gestart werd
+  if (_vorigeTab && !_vorigeTab.classList.contains('active')) {
+    _vorigeTab.click();
+  }
+}
+
+function renderVoortgang(data, type) {
+  const wrap    = document.getElementById('voortgang-wrap');
+  const results = data.resultaten || [];
+
+  if (results.length === 0 && data.bezig) {
+    wrap.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px"><div class="spinner" style="margin:0 auto 12px"></div>Verwerken...</div>`;
+    return;
+  }
+
+  const stalen_todo = alleStalen.filter(s => {
+    if (results.find(r => r.maximo === s.maximo && r.datum === s.datum)) return false;
+    if (type === 'wo-opzoeken') return true;
+    return s.status === 'INUITV';
+  });
+
+  let html = '';
+  for (const s of alleStalen) {
+    const r = results.find(r => r.maximo === s.maximo && r.datum === s.datum);
+    const verwerkt = !!r;
+    let icon, detail;
+
+    if (verwerkt) {
+      if (r.ok === false) {
+        icon   = '<span style="color:var(--red)">✕</span>';
+        detail = `<span style="color:var(--red);font-family:var(--mono);font-size:12px">${escHtml(r.fout || 'Mislukt')}</span>`;
+      } else {
+        icon   = '<span style="color:var(--green)">✓</span>';
+        const wo = r.wo_id && r.wo_id !== 'nvt' ? `WO ${r.wo_id} — ${r.status||''}` : 'Geen WO';
+        detail = `<span style="color:var(--green);font-family:var(--mono);font-size:12px">${wo}</span>`;
+      }
+    } else if (data.bezig) {
+      icon   = '<div class="spinner"></div>';
+      detail = '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">Wachten...</span>';
+    } else {
+      icon   = '<span style="color:var(--muted)">—</span>';
+      detail = '';
+    }
+
+    html += `<div class="progress-item">
+      <div class="progress-icon">${icon}</div>
+      <div>
+        <div style="font-weight:700;font-size:14px">${escHtml(s.maximo)} &nbsp; <span style="color:var(--muted);font-size:13px">${escHtml(s.eenheid)}</span></div>
+        <div style="font-family:var(--mono);font-size:12px;color:var(--muted)">${escHtml(s.datum)}</div>
+      </div>
+      <div class="progress-details">${detail}</div>
+    </div>`;
+  }
+
+  wrap.innerHTML = html || '<div style="padding:18px;color:var(--muted);font-family:var(--mono)">Geen stalen</div>';
+}
+
+// ═══════════════════════════════════════════════════════════
+// Beheer
+// ═══════════════════════════════════════════════════════════
+async function verwijderStaal(maximo, datum) {
+  if (!confirm(`Staal ${maximo} (${datum}) verwijderen?`)) return;
+  await fetch('/api/dialyse-resultaten/staal-verwijderen', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({maximo, datum})
+  });
+  await laadData();
+}
+
+async function verwijderSelectie() {
+  if (geselecteerd.size === 0) return;
+  if (!confirm(`${geselecteerd.size} staal/stalen verwijderen?`)) return;
+  for (const k of geselecteerd) {
+    const [maximo, datum] = k.split('|');
+    await fetch('/api/dialyse-resultaten/staal-verwijderen', {
+      method: 'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({maximo, datum})
+    });
+  }
+  geselecteerd.clear();
+  await laadData();
+}
+
+async function allesWissen() {
+  if (!confirm('Alle stalen wissen?')) return;
+  await fetch('/api/dialyse-resultaten/alles-wissen', {method:'POST'});
+  await laadData();
+}
+
+async function wisGeschiedenis() {
+  if (!confirm('Geschiedenis wissen?')) return;
+  await fetch('/api/dialyse-resultaten/geschiedenis/wis', {method:'POST'});
+  await laadData();
+}
+
+let psPscUrl = '';
+
+// ═══════════════════════════════════════════════════════════
+// Drag & drop Excel op stalen overzicht
+// ═══════════════════════════════════════════════════════════
+function stalenDragOver(e) {
+  e.preventDefault();
+  const zone = document.getElementById('stalen-dropzone');
+  zone.style.borderColor = 'var(--accent)';
+  zone.style.background  = 'var(--accent-soft, #f0f4ff)';
+}
+
+function stalenDragLeave(e) {
+  const zone = document.getElementById('stalen-dropzone');
+  zone.style.borderColor = 'var(--border)';
+  zone.style.background  = '';
+}
+
+async function stalenDrop(e) {
+  e.preventDefault();
+  stalenDragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  if (!file.name.match(/\.xlsx?$/i)) {
+    document.getElementById('stalen-drop-status').textContent = '⚠ Enkel .xlsx bestanden';
+    return;
+  }
+  const status = document.getElementById('stalen-drop-status');
+  status.textContent = '⏳ Importeren...';
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res  = await fetch('/api/dialyse-resultaten/upload-excel', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      status.textContent = `✓ ${data.aangeleverd} stalen geladen (${data.nieuw ?? '?'} nieuw)`;
+      await laadData();
+    } else {
+      status.textContent = '✕ ' + (data.fout || 'Fout bij importeren');
+    }
+  } catch (err) {
+    status.textContent = '✕ Netwerkfout';
+  }
+  setTimeout(() => { status.textContent = ''; }, 4000);
+}
+
+function openWO(woId) {
+  const woNr = String(woId).replace(/^WO0*/, '').padStart(10, '0');
+  if (!psPscUrl) {
+    alert('PeopleSoft URL niet geladen, herlaad de pagina.');
+    return;
+  }
+  const url = psPscUrl + 'EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL?BUSINESS_UNIT=POUZL&UZ_WO_ID=' + woNr
+    + '&PAGE=UZFM_WO_ALG&PortalContentProvider=ERP&PortalCRefLabel=Werkorder'
+    + '&PortalRegistryName=EMPLOYEE&PortalHostNode=ERP&NoCrumbs=yes&PortalKeyStruct=yes';
+  window.open(url, '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════
+fetch('/api/dialyse-resultaten/config')
+  .then(r => r.json())
+  .then(d => {
+    psPscUrl = d.ps_psc_url || '';
+    document.getElementById('tgl-headless').checked = !!d.headless;
+  });
+laadData();
+laadPdfStalen();
+
+// ═══════════════════════════════════════════════════════════
+// RO RINGLEIDING — state & functies
+// ═══════════════════════════════════════════════════════════
+
+let _roStalen = [];
+let _roSelectie = new Set();
+
+function _roKleur(waarde) {
+  if (!waarde) return "";
+  const v = waarde.trim().toUpperCase();
+  if (v === "LM" || v === "M") return "color:var(--red);font-weight:700";
+  if (waarde.includes("<")) return "color:var(--green)";
+  if (waarde.includes(">")) return "color:var(--red)";
+  try {
+    const n = parseFloat(v.replace(",", "."));
+    if (!isNaN(n) && n >= 100) return "color:var(--red);font-weight:700";
+    if (!isNaN(n) && n > 0) return "color:var(--orange,#f59e0b)";
+  } catch(e) {}
+  return "color:var(--green)";
+}
+
+async function roLaadData() {
+  const r = await fetch("/api/ro-resultaten").then(r => r.json());
+  _roStalen = r.stalen || [];
+  roRenderTabel();
+  roRenderStats();
+  roRenderGeschiedenis(r.geschiedenis || []);
+}
+
+function roRenderStats() {
+  const totaal    = _roStalen.length;
+  const inuitv    = _roStalen.filter(s => s.status === "INUITV").length;
+  const nvt       = _roStalen.filter(s => s.status === "nvt" || s.wo_id === "nvt").length;
+  const verzonden = _roStalen.filter(s => s.status === "UITGEV").length;
+  const fout      = _roStalen.filter(s => s.status && !["INUITV","nvt","UITGEV"].includes(s.status)).length;
+  document.getElementById("ro-stat-totaal").textContent    = totaal;
+  document.getElementById("ro-stat-inuitv").textContent    = inuitv;
+  document.getElementById("ro-stat-nvt").textContent       = nvt;
+  document.getElementById("ro-stat-verzonden").textContent = verzonden;
+  document.getElementById("ro-stat-fout").textContent      = fout;
+}
+
+function roRenderTabel() {
+  const tbody = document.getElementById("ro-stalen-tbody");
+  if (!_roStalen.length) {
+    tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:28px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen stalen geladen</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _roStalen.map(s => {
+    const key = s.maximo + "|" + s.datum;
+    const sel = _roSelectie.has(key);
+    const statusKleur = s.status === "INUITV" ? "var(--green)" : s.status === "UITGEV" ? "var(--accent)" : s.status === "nvt" ? "var(--muted)" : s.status ? "var(--red)" : "var(--muted)";
+    const okIco = s.status === "UITGEV" ? "✓" : s.status === "INUITV" ? "●" : s.status === "nvt" ? "—" : s.status ? "✗" : "";
+    return `<tr style="${sel ? 'background:rgba(59,130,246,.08)' : ''}">
+      <td><input type="checkbox" ${sel ? "checked" : ""} onchange="roToggleRij('${key}', this.checked)"></td>
+      <td style="font-family:var(--mono);font-size:12px">${s.datum || ""}</td>
+      <td>${s.eenheid || ""}</td>
+      <td style="font-size:12px">${s.locatie || ""}</td>
+      <td style="font-family:var(--mono);font-weight:700">${s.maximo}</td>
+      <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.kiemgetal_begin)}">${s.kiemgetal_begin || ""}</td>
+      <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.endotoxine_begin)}">${s.endotoxine_begin || ""}</td>
+      <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.kiemgetal_einde)}">${s.kiemgetal_einde || ""}</td>
+      <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.endotoxine_einde)}">${s.endotoxine_einde || ""}</td>
+      <td style="font-family:var(--mono);font-size:12px">${s.wo_id || "—"}</td>
+      <td style="font-family:var(--mono);font-size:12px;color:${statusKleur}">${s.status || "—"}</td>
+      <td style="text-align:center;color:${statusKleur}">${okIco}</td>
+      <td><button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="roVerwijderStaal('${s.maximo}','${s.datum}')">🗑</button></td>
+    </tr>`;
+  }).join("");
+
+  const actBalk = document.getElementById("ro-actie-balk");
+  actBalk.style.display = _roSelectie.size ? "flex" : "none";
+  if (_roSelectie.size) document.getElementById("ro-actie-info").textContent = `${_roSelectie.size} geselecteerd`;
+}
+
+function roRenderGeschiedenis(gesch) {
+  const tbody = document.getElementById("ro-geschiedenis-tbody");
+  if (!gesch.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:13px">Geen geschiedenis</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = [...gesch].reverse().map(g => {
+    const kleur = g.ok ? "var(--green)" : "var(--red)";
+    return `<tr>
+      <td style="font-family:var(--mono);font-size:12px">${g.datum_actie || ""}</td>
+      <td style="font-family:var(--mono);font-size:12px">${g.datum_staal || ""}</td>
+      <td style="font-family:var(--mono);font-weight:700">${g.maximo || ""}</td>
+      <td>${g.eenheid || ""}</td>
+      <td style="font-family:var(--mono)">${g.wo_id || ""}</td>
+      <td style="color:${kleur};font-family:var(--mono)">${g.status || ""}</td>
+      <td style="font-size:12px">${g.melding || ""}</td>
+    </tr>`;
+  }).join("");
+}
+
+function roToggleRij(key, checked) {
+  if (checked) _roSelectie.add(key); else _roSelectie.delete(key);
+  roRenderTabel();
+}
+function roToggleAlles(cb) {
+  if (cb.checked) _roStalen.forEach(s => _roSelectie.add(s.maximo + "|" + s.datum));
+  else _roSelectie.clear();
+  roRenderTabel();
+}
+function roSelecteerAlleInuitv() {
+  _roStalen.filter(s => s.status === "INUITV").forEach(s => _roSelectie.add(s.maximo + "|" + s.datum));
+  roRenderTabel();
+}
+function roDeselecteerAlles() { _roSelectie.clear(); roRenderTabel(); }
+
+async function roUploadExcel(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById("ro-upload-status");
+  status.textContent = "⏳ Importeren...";
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch("/api/ro-resultaten/upload-excel", {method:"POST", body:fd}).then(r=>r.json());
+  if (r.ok) {
+    status.textContent = `✓ ${r.aangeleverd} stalen aangeleverd, ${r.nieuw} nieuw toegevoegd`;
+    status.style.color = "var(--green)";
+    await roLaadData();
+    toonTab("tab-ro-stalen", document.querySelectorAll(".tab")[4]);
+  } else {
+    status.textContent = "✗ " + r.fout;
+    status.style.color = "var(--red)";
+  }
+  input.value = "";
+}
+
+async function roWoOpzoeken() {
+  await roStartJob("opzoeken", []);
+}
+async function roWoOpzoekenSelectie() {
+  await roStartJob("opzoeken", [..._roSelectie]);
+}
+async function roVerzendSelectie() {
+  await roStartJob("verzenden", [..._roSelectie]);
+}
+
+async function roStartJob(type, selectie) {
+  const url  = type === "opzoeken" ? "/api/ro-resultaten/wo-opzoeken" : "/api/ro-resultaten/verzenden";
+  const body = JSON.stringify({selectie});
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"}, body}).then(r=>r.json());
+  if (!r.ok) { alert(r.fout || "Fout bij starten job"); return; }
+  await pollRoJob(r.job_id, 0, type);
+}
+
+async function pollRoJob(job_id, logIndex, type) {
+  let res, data;
+  try {
+    res  = await fetch(`/api/ro-resultaten/job/${job_id}?_=${Date.now()}`);
+    data = await res.json();
+  } catch (e) {
+    debugLog(`RO poll fout: ${e}`, "fout");
+    setTimeout(() => pollRoJob(job_id, logIndex, type), 2000);
+    return;
+  }
+
+  const logs = data.stap_logs || [];
+  for (let i = logIndex; i < logs.length; i++) {
+    const raw = logs[i];
+    const msg = raw.replace(/^\[\d+:\d+:\d+\]\s*/, "");
+    const lt  = msg.startsWith("✓") ? "ok" : msg.startsWith("❌") || msg.startsWith("✕") ? "fout" : msg.startsWith("⚠") ? "warn" : "info";
+    debugLog(msg, lt);
+  }
+
+  if (data.bezig) {
+    setTimeout(() => pollRoJob(job_id, logs.length, type), 2000);
+    return;
+  }
+
+  debugSetStatus(data.fout ? "error" : "ok");
+  const ok   = (data.resultaten || []).filter(r => r.ok !== false).length;
+  const fout = (data.resultaten || []).filter(r => r.ok === false).length;
+  document.getElementById("voortgang-status").textContent = `Klaar: ${ok} OK, ${fout} mislukt`;
+  debugLog(`RO job klaar: ${ok} OK, ${fout} mislukt`, ok > 0 && fout === 0 ? "ok" : fout > 0 ? "warn" : "info");
+  await roLaadData();
+}
+
+async function roVerwijderStaal(maximo, datum) {
+  if (!confirm(`Staal ${maximo} (${datum}) verwijderen?`)) return;
+  await fetch("/api/ro-resultaten/staal-verwijderen", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({maximo, datum})});
+  await roLaadData();
+}
+async function roVerwijderSelectie() {
+  if (!_roSelectie.size) return;
+  if (!confirm(`${_roSelectie.size} stalen verwijderen?`)) return;
+  for (const key of _roSelectie) {
+    const [maximo, datum] = key.split("|");
+    await fetch("/api/ro-resultaten/staal-verwijderen", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({maximo, datum})});
+  }
+  _roSelectie.clear();
+  await roLaadData();
+}
+async function roAllesWissen() {
+  if (!confirm("Alle RO stalen wissen?")) return;
+  await fetch("/api/ro-resultaten/alles-wissen", {method:"POST"});
+  await roLaadData();
+}
+async function roWisGeschiedenis() {
+  await fetch("/api/ro-resultaten/geschiedenis/wis", {method:"POST"});
+  await roLaadData();
+}
+
+// Drag & drop op RO dropzone
+function roDragOver(e) {
+  e.preventDefault();
+  document.getElementById("ro-stalen-dropzone").style.borderColor = "var(--accent)";
+  document.getElementById("ro-stalen-dropzone").style.background  = "rgba(59,130,246,.05)";
+}
+function roDragLeave(e) {
+  document.getElementById("ro-stalen-dropzone").style.borderColor = "var(--border)";
+  document.getElementById("ro-stalen-dropzone").style.background  = "";
+}
+async function roDrop(e) {
+  e.preventDefault();
+  roDragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const status = document.getElementById("ro-drop-status");
+  status.textContent = "⏳ Importeren...";
+  status.style.color = "var(--muted)";
+  const fd = new FormData();
+  fd.append("file", file);
+  const r = await fetch("/api/ro-resultaten/upload-excel", {method:"POST", body:fd}).then(r=>r.json());
+  if (r.ok) {
+    status.textContent = `✓ ${r.nieuw} nieuwe stalen`;
+    status.style.color = "var(--green)";
+    await roLaadData();
+  } else {
+    status.textContent = "✗ " + r.fout;
+    status.style.color = "var(--red)";
+  }
+}
+
+roLaadData();
+</script>
+<script>
+(function() {
+  var _start = null;
+  setInterval(async function() {
+    try {
+      var r = await fetch("/api/ping").then(function(x){return x.json();});
+      if (_start === null) { _start = r.start; return; }
+      if (r.start !== _start) { location.reload(); }
+    } catch(e) {}
+  }, 3000);
+})();
+</script>
+</body>
+</html>

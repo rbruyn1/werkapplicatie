@@ -1,0 +1,980 @@
+{% set actieve_pagina = 'thuisdialyse' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thuisdialyse Staalnames</title>
+<style>
+  :root {
+    --bg:      #f0f2f7;
+    --panel:   #ffffff;
+    --border:  #d0d5e0;
+    --text:    #1a1f2e;
+    --muted:   #6070a0;
+    --accent:  #1a6bdd;
+    --green:   #1a9e4a;
+    --red:     #cc2200;
+    --yellow:  #c49500;
+    --mono:    'Trebuchet MS', sans-serif;
+    --sans:    'Trebuchet MS', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--panel);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-badge { background: var(--accent); color: #fff; font-family: var(--mono); font-size: 11px; letter-spacing: 2px; padding: 5px 10px; border-radius: 3px; }
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+
+  /* ── Layout ── */
+  .main { padding: 24px 28px; max-width: 1300px; }
+
+  /* ── Tabs ── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 2px solid var(--border); }
+  .tab { font-family: var(--mono); font-size: 13px; padding: 10px 20px; cursor: pointer; border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all .15s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tabpanel { display: none; }
+  .tabpanel.active { display: block; }
+
+  /* ── Card ── */
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+  .card-header { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: #e8ecf4; flex-wrap: wrap; gap: 8px; }
+  .card-title { font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--text); }
+
+  /* ── Tabel ── */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead tr { background: #e2e6f0; }
+  th { padding: 10px 14px; text-align: left; font-family: var(--mono); font-size: 12px; letter-spacing: 1px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #e0e4ef; transition: background .1s; }
+  tbody tr:hover { background: #f5f7fc; }
+  td { padding: 11px 14px; vertical-align: middle; }
+
+  /* ── Checkbox ── */
+  .cb-wrap { display: flex; align-items: center; justify-content: center; }
+  input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+
+  /* ── Badges ── */
+  .badge { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 3px; display: inline-block; font-weight: 700; white-space: nowrap; }
+  .badge-inuitv { background: #d4f8d4; color: #1a6b1a; }
+  .badge-goed   { background: #fff3cc; color: #7a5800; }
+  .badge-fout   { background: #ffe0dd; color: #aa2200; }
+  .badge-wacht  { background: #e8ecf4; color: var(--muted); }
+  .badge-type   { background: #e0eaff; color: #1a4488; }
+
+  /* ── Datum kleur ── */
+  .datum-ok   { color: var(--green); font-family: var(--mono); font-size: 12px; }
+  .datum-oud  { color: var(--yellow); font-family: var(--mono); font-size: 12px; }
+  .datum-geen { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+
+  /* ── Knoppen ── */
+  .btn { font-family: var(--mono); font-size: 13px; padding: 9px 18px; border-radius: 4px; cursor: pointer; border: none; transition: opacity .15s; font-weight: 700; letter-spacing: .5px; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { opacity: .85; }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-danger  { background: var(--red); color: #fff; }
+  .btn-danger:hover { opacity: .85; }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-success:hover { opacity: .85; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--muted); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Selectiebalk ── */
+  .selectie-bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #eef2ff; border-top: 1px solid var(--border); flex-wrap: wrap; }
+  .selectie-info { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 700; }
+
+  /* ── Voortgang ── */
+  .progress-wrap { padding: 18px; }
+  .progress-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .progress-item:last-child { border-bottom: none; }
+  .progress-icon { font-size: 18px; width: 24px; text-align: center; flex-shrink: 0; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .progress-details { margin-left: auto; font-family: var(--mono); font-size: 12px; text-align: right; }
+
+  /* ── Formulier ── */
+  .toestel-form { display: grid; grid-template-columns: 100px 1fr 130px 120px auto; gap: 8px; align-items: end; padding: 14px 18px; background: #f8f9fc; border-top: 1px solid var(--border); }
+  @media (max-width: 900px) {
+    .toestel-form { grid-template-columns: 1fr 1fr; }
+  }
+  .form-group label { font-family: var(--mono); font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; letter-spacing: .5px; }
+  .form-group input, .form-group select { width: 100%; border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font-size: 13px; font-family: var(--mono); background: #fff; color: var(--text); }
+  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+
+  /* ── Import sectie ── */
+  .import-section { background: #f8f9fc; border: 1px dashed var(--border); border-radius: 6px; padding: 18px; margin-bottom: 20px; }
+  .import-section h3 { font-family: var(--mono); font-size: 13px; color: var(--muted); margin-bottom: 12px; letter-spacing: 1px; }
+  .import-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  input[type=file] { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  /* ── Overige ── */
+  .empty { text-align: center; padding: 40px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .alert { padding: 12px 16px; border-radius: 4px; font-family: var(--mono); font-size: 13px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .alert-success { background: #d4f8d4; color: #1a6b1a; border: 1px solid #a0e0a0; }
+  .alert-error   { background: #ffe0dd; color: #aa2200; border: 1px solid #ffb0a8; }
+  .alert-info    { background: #ddeeff; color: #1a4488; border: 1px solid #aaccff; }
+  .hidden { display: none !important; }
+
+  /* ── Debug modus ── */
+  .debug-toggle-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: #1a1f2e; border-top: 2px solid var(--accent);
+    display: flex; align-items: center; gap: 12px; padding: 8px 18px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .debug-toggle-btn {
+    background: none; border: 1px solid #3a4a6a; color: #7ab0ff;
+    font-family: var(--mono); font-size: 11px; padding: 4px 12px;
+    border-radius: 3px; cursor: pointer; letter-spacing: .5px;
+    transition: all .15s;
+  }
+  .debug-toggle-btn:hover { border-color: var(--accent); color: #fff; }
+  .tgl-wrap { display:flex; align-items:center; gap:5px; margin-left:12px; }
+  .tgl-lbl { font-family:var(--mono,monospace); font-size:11px; }
+  .tgl { position:relative; width:30px; height:16px; flex-shrink:0; }
+  .tgl input { opacity:0; width:0; height:0; }
+  .tgl-sl { position:absolute; inset:0; background:#1e3050; border-radius:16px; cursor:pointer; transition:.2s; }
+  .tgl-sl:before { content:''; position:absolute; width:10px; height:10px; left:3px; bottom:3px; background:#3a5070; border-radius:50%; transition:.2s; }
+  .tgl input:checked + .tgl-sl { background:var(--accent,#1a6bdd); }
+  .tgl input:checked + .tgl-sl:before { background:#fff; transform:translateX(14px); }
+  .debug-toggle-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .debug-status-dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4a6a; flex-shrink: 0; }
+  .debug-status-dot.running { background: #f5a623; animation: pulse 1s ease-in-out infinite; }
+  .debug-status-dot.ok { background: var(--green); }
+  .debug-status-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .debug-label { color: #7ab0ff; letter-spacing: 1px; }
+  .debug-last-msg { color: #a0b4d0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+
+  .debug-panel {
+    position: fixed; bottom: 40px; left: 0; right: 0; z-index: 199;
+    background: #0e1118; border-top: 1px solid #2a3555;
+    height: 420px; display: flex; flex-direction: column;
+    transition: transform .25s ease; transform: translateY(100%);
+  }
+  .debug-panel.open { transform: translateY(0); }
+  body.debug-open { padding-bottom: 464px; }
+  .debug-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 18px; border-bottom: 1px solid #1e2a44;
+    font-family: var(--mono); font-size: 11px; color: #5070a0;
+    flex-shrink: 0;
+  }
+  .debug-panel-header span { letter-spacing: 1px; }
+  .debug-panel-header-right { display: flex; gap: 8px; align-items: center; }
+  .debug-clear-btn {
+    background: none; border: 1px solid #2a3555; color: #5070a0;
+    font-family: var(--mono); font-size: 10px; padding: 2px 8px;
+    border-radius: 2px; cursor: pointer;
+  }
+  .debug-clear-btn:hover { color: var(--red); border-color: var(--red); }
+  .debug-log {
+    flex: 1; overflow-y: auto; padding: 6px 0;
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  }
+  .debug-log::-webkit-scrollbar { width: 6px; }
+  .debug-log::-webkit-scrollbar-track { background: #0e1118; }
+  .debug-log::-webkit-scrollbar-thumb { background: #2a3555; border-radius: 3px; }
+  .debug-entry {
+    display: grid;
+    grid-template-columns: 70px 64px 22px 1fr;
+    gap: 0 8px;
+    padding: 2px 14px;
+    border-bottom: 1px solid #0d1420;
+    align-items: baseline;
+  }
+  .debug-entry:hover { background: #111824; }
+  .debug-entry:last-child { border-bottom: none; }
+  .debug-ts   { color: #2e4570; font-size: 11px; }
+  .debug-td-tag { color: #e8a020; font-weight: 700; font-size: 11px; }
+  .debug-icon { font-size: 11px; text-align: center; }
+  .debug-msg  { color: #b0c4de; word-break: break-word; }
+  /* Kleuren per type */
+  .debug-msg.klik  { color: #60a8f0; }   /* blauw — klik/navigeer */
+  .debug-msg.type  { color: #a880ff; }   /* paars — type/fill */
+  .debug-msg.toets { color: #7ab8ff; }   /* lichtblauw — toetsaanslag */
+  .debug-msg.lees  { color: #90d0b0; }   /* mintgroen — gelezen waarde */
+  .debug-msg.wacht { color: #f0c040; }   /* geel — wachten/poging */
+  .debug-msg.ok    { color: #4ade80; }   /* groen — succes */
+  .debug-msg.err   { color: #f87171; }   /* rood — fout */
+  .debug-msg.info  { color: #93c5fd; }   /* lichtblauw — info */
+  .debug-msg.stap  { color: #c0d8ff; font-weight:600; } /* vet — stap header */
+  .debug-msg.sep   { color: #1e3050; letter-spacing: 2px; font-size: 11px; }
+  .debug-entry-sep-row { grid-column: 1/-1; padding: 5px 14px 3px; }
+  body { padding-bottom: 44px; }
+  a.wo-link { color: var(--accent); font-family: var(--mono); font-size: 12px; text-decoration: none; }
+  a.wo-link:hover { text-decoration: underline; }
+  .stat-row { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 14px 20px; flex: 1; min-width: 140px; }
+  .stat-nr { font-family: var(--mono); font-size: 28px; font-weight: 700; color: var(--accent); }
+  .stat-lbl { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="/assets/image.png" alt="UZ Leuven" style="height:36px;width:auto;">
+    <h1>Thuisdialyse Staalnames</h1>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="last-sync"></span>
+    {% include "_nav.html" %}
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="tabs">
+    <button class="tab active" data-tab="staalnames">STAALNAMES UITVOEREN</button>
+    <button class="tab" data-tab="geschiedenis">GESCHIEDENIS</button>
+    <button class="tab" data-tab="beheer">TOESTELLEN BEHEREN</button>
+  </div>
+
+  <!-- ═══════════════════════════════ TAB 1 ═══════════════════════════════ -->
+  <div class="tabpanel active" id="tab-staalnames">
+
+    <div id="alert-staal" class="alert hidden"></div>
+
+    <!-- Stats -->
+    <div class="stat-row" id="stat-row"></div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">TOESTELLEN SELECTEREN</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="selecteerAlle()">Alles</button>
+          <button class="btn btn-sm btn-outline" onclick="deselecteerAlle()">Geen</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:44px;text-align:center">✓</th>
+            <th>TD NR</th>
+            <th>PATIËNT</th>
+            <th>MAXIMO</th>
+            <th>TYPE</th>
+            <th>LAATSTE STAALNAME</th>
+            <th>LAATSTE WO</th>
+            <th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="toestellen-body">
+          <tr><td colspan="8"><div class="empty">Laden...</div></td></tr>
+        </tbody>
+      </table>
+      <div class="selectie-bar">
+        <span class="selectie-info" id="selectie-count">0 toestellen geselecteerd</span>
+        <button class="btn btn-primary" id="wo-btn" onclick="maakWOAan()" disabled>
+          ⚙ WO'S AANMAKEN IN PEOPLESOFT
+        </button>
+      </div>
+    </div>
+
+    <!-- Voortgangskaart (verborgen tot job start) -->
+    <div class="card hidden" id="voortgang-card">
+      <div class="card-header">
+        <span class="card-title">VOORTGANG</span>
+        <span id="voortgang-status" style="font-family:var(--mono);font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div class="progress-wrap" id="voortgang-lijst"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ TAB 2 ═══════════════════════════════ -->
+  <div class="tabpanel" id="tab-geschiedenis">
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">UITGEVOERDE STAALNAMES</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="laadGeschiedenis()">↻ Verversen</button>
+          <button class="btn btn-sm btn-danger" onclick="wisGeschiedenis()">🗑 Wis alles</button>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>DATUM</th>
+            <th>TD NR</th>
+            <th>PATIËNT</th>
+            <th>MAXIMO</th>
+            <th>WO NUMMER</th>
+            <th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="geschiedenis-body">
+          <tr><td colspan="6"><div class="empty">Laden...</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ TAB 3 ═══════════════════════════════ -->
+  <div class="tabpanel" id="tab-beheer">
+    <div id="alert-beheer" class="alert hidden"></div>
+
+    <!-- Excel import -->
+    <div class="import-section">
+      <h3>IMPORTEER UIT EXCEL (.xlsm)</h3>
+      <div class="import-row">
+        <input type="file" id="excel-file" accept=".xlsm,.xlsx">
+        <button class="btn btn-success btn-sm" onclick="importeerExcel()">↑ Importeren</button>
+        <span style="font-family:var(--mono);font-size:12px;color:var(--muted)">
+          Leest het "Thuisdialyse"-sheet automatisch uit
+        </span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">TOESTELLENLIJST</span>
+        <span style="font-family:var(--mono);font-size:12px;color:var(--muted)" id="beheer-count"></span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>TD NR</th>
+            <th>PATIËNT</th>
+            <th>MAXIMO</th>
+            <th>TYPE</th>
+            <th>LAATSTE STAALNAME</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="beheer-body"></tbody>
+      </table>
+
+      <!-- Nieuw toestel -->
+      <div class="toestel-form">
+        <div class="form-group">
+          <label>TD NUMMER</label>
+          <input type="number" id="nieuw-td" placeholder="bv. 70" min="1">
+        </div>
+        <div class="form-group">
+          <label>PATIËNT</label>
+          <input type="text" id="nieuw-patient" placeholder="Naam patiënt">
+        </div>
+        <div class="form-group">
+          <label>MAXIMO (T-NR)</label>
+          <input type="text" id="nieuw-maximo" placeholder="bv. T309973">
+        </div>
+        <div class="form-group">
+          <label>TYPE</label>
+          <input type="text" id="nieuw-type" value="AK98">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" onclick="voegToestelToe()">+ Toevoegen</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-outline" onclick="renderBeheer(true)">↺ Annuleren</button>
+      <button class="btn btn-primary" onclick="slaToestellenOp()">💾 OPSLAAN</button>
+    </div>
+  </div>
+
+</div><!-- .main -->
+
+<!-- ═══════════════════════════════ DEBUG PANEL ═══════════════════════════════ -->
+<div class="debug-panel" id="debug-panel">
+  <div class="debug-panel-header">
+    <span>⬛ DEBUG LOG — WO VERWERKING</span>
+    <div class="debug-panel-header-right">
+      <!-- Legenda -->
+      <span style="color:#60a8f0;font-size:10px">🖱 KLIK</span>
+      <span style="color:#a880ff;font-size:10px">⌨ TYPE</span>
+      <span style="color:#7ab8ff;font-size:10px">↵ TOETS</span>
+      <span style="color:#90d0b0;font-size:10px">👁 LEES</span>
+      <span style="color:#f0c040;font-size:10px">⏳ WACHT</span>
+      <span style="color:#4ade80;font-size:10px">✓ OK</span>
+      <span style="color:#f87171;font-size:10px">✕ FOUT</span>
+      <span id="debug-entry-count" style="color:#3a5080;margin-left:8px">0 berichten</span>
+      <button class="debug-clear-btn" onclick="debugWis()">✕ Wissen</button>
+    </div>
+  </div>
+  <div class="debug-log" id="debug-log">
+    <div style="color:#2a3a5a;font-family:var(--mono);font-size:12px;padding:24px 0;text-align:center">
+      Debug log is leeg — start een WO verwerking om alle stappen te zien
+    </div>
+  </div>
+</div>
+<div class="debug-toggle-bar">
+  <div class="debug-status-dot" id="debug-dot"></div>
+  <span class="debug-label">DEBUG</span>
+  <button class="debug-toggle-btn" id="debug-toggle-btn" onclick="debugToggle()">▲ TOON LOG</button>
+  <span class="debug-last-msg" id="debug-last-msg">Geen actieve verwerking</span>
+  <div class="tgl-wrap" title="Browser zichtbaar of headless">
+    <span class="tgl-lbl" style="color:#3a5070">HEADLESS</span>
+    <label class="tgl">
+      <input type="checkbox" id="tgl-headless" onchange="setHeadless(this.checked)">
+      <span class="tgl-sl"></span>
+    </label>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════════════════════════
+let allToestellen = [];
+let geselecteerd  = new Set();
+let beheerLijst   = [];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Debug modus
+// ═══════════════════════════════════════════════════════════════════════════
+let debugOpen    = false;
+let debugEntries = [];
+let debugTeller  = 0;
+
+// Map van type → [icoon, css-klasse]
+const DEBUG_TYPES = {
+  klik:  ['🖱', 'klik'],
+  type:  ['⌨', 'type'],
+  toets: ['↵', 'toets'],
+  lees:  ['👁', 'lees'],
+  wacht: ['⏳', 'wacht'],
+  ok:    ['✓', 'ok'],
+  err:   ['✕', 'err'],
+  info:  ['→', 'info'],
+  stap:  ['▸', 'stap'],
+};
+
+function _detecteerType(bericht) {
+  const b = bericht.toLowerCase();
+  if (b.includes('[klik]') || b.includes('[klik]'))   return 'klik';
+  if (b.includes('[fill]') || b.includes('[type]'))   return 'type';
+  if (b.includes('[toets]') || b.includes('[navigeer]')) return 'toets';
+  if (b.includes('gelezen') || b.includes('leest') || b.includes('bevat') || b.includes(' = \'') || b.includes('geladen =')) return 'lees';
+  if (b.includes('wachten') || b.includes('poging') || b.includes('wacht'))  return 'wacht';
+  if (b.includes('✓') || b.includes(' klaar') || b.includes('geslaagd') || b.includes(' ok'))  return 'ok';
+  if (b.includes('❌') || b.includes('✕') || b.includes('fout') || b.includes('mislukt') || b.includes('exceptie')) return 'err';
+  if (b.match(/^stap \d+/))  return 'stap';
+  if (b.includes('login') || b.includes('browser') || b.includes('══'))  return 'info';
+  return '';
+}
+
+function debugToggle() {
+  debugOpen = !debugOpen;
+  const panel = document.getElementById('debug-panel');
+  const btn   = document.getElementById('debug-toggle-btn');
+  panel.classList.toggle('open', debugOpen);
+  document.body.classList.toggle('debug-open', debugOpen);
+  btn.textContent = debugOpen ? '▼ VERBERG LOG' : '▲ TOON LOG';
+  btn.classList.toggle('active', debugOpen);
+  if (debugOpen) debugScrollNaar();
+}
+
+function debugScrollNaar() {
+  const log = document.getElementById('debug-log');
+  // Alleen auto-scrollen als gebruiker niet al omhoog gescrold heeft
+  const isOnderaan = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  if (isOnderaan || debugTeller <= 3) log.scrollTop = log.scrollHeight;
+}
+
+function debugWis() {
+  debugEntries = [];
+  debugTeller  = 0;
+  document.getElementById('debug-log').innerHTML =
+    '<div style="color:#2a3a5a;font-family:var(--mono);font-size:12px;padding:24px 0;text-align:center">Log gewist</div>';
+  document.getElementById('debug-entry-count').textContent = '0 berichten';
+  document.getElementById('debug-last-msg').textContent = 'Log gewist';
+}
+
+function debugSetStatus(status) {
+  const dot = document.getElementById('debug-dot');
+  dot.className = 'debug-status-dot' + (status !== 'idle' ? ' ' + status : '');
+}
+
+function debugLog(tdNr, bericht, forceType = '') {
+  debugTeller++;
+  const ts    = new Date().toLocaleTimeString('nl-BE', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const type  = forceType || _detecteerType(bericht);
+  const [icon, klasse] = DEBUG_TYPES[type] || ['·', ''];
+  debugEntries.push({ ts, tdNr, bericht, type });
+
+  const tdTag = tdNr
+    ? `<span class="debug-td-tag">TD${tdNr}</span>`
+    : `<span class="debug-td-tag" style="color:#1e3050">———</span>`;
+
+  const log = document.getElementById('debug-log');
+  if (debugTeller === 1) log.innerHTML = '';  // Verwijder placeholder
+
+  const el = document.createElement('div');
+  el.className = 'debug-entry';
+  el.innerHTML =
+    `<span class="debug-ts">${ts}</span>` +
+    `${tdTag}` +
+    `<span class="debug-icon" style="color:${_iconKleur(type)}">${icon}</span>` +
+    `<span class="debug-msg ${klasse}">${escapeHtml(bericht)}</span>`;
+  log.appendChild(el);
+
+  document.getElementById('debug-entry-count').textContent = `${debugTeller} berichten`;
+  document.getElementById('debug-last-msg').textContent = (tdNr ? `TD${tdNr}: ` : '') + bericht.replace(/\[.*?\]/g, '').trim();
+
+  if (debugOpen) debugScrollNaar();
+}
+
+function _iconKleur(type) {
+  const kaart = {klik:'#60a8f0',type:'#a880ff',toets:'#7ab8ff',lees:'#90d0b0',
+                 wacht:'#f0c040',ok:'#4ade80',err:'#f87171',info:'#93c5fd',stap:'#c0d8ff'};
+  return kaart[type] || '#3a5080';
+}
+
+function debugSep(tdNr) {
+  const log = document.getElementById('debug-log');
+  const el  = document.createElement('div');
+  el.className = 'debug-entry';
+  el.innerHTML =
+    `<div class="debug-entry-sep-row" style="color:#1e3255;font-family:var(--mono);font-size:11px;letter-spacing:2px">` +
+    `──────────────────── TD${tdNr} ────────────────────</div>`;
+  log.appendChild(el);
+  if (debugOpen) debugScrollNaar();
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+
+const PS_BASE = 'https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD_1/EMPLOYEE/ERP';
+const WO_URL  = `${PS_BASE}/c/UZFM_MENU.UZFM_WERKORDER.GBL?Page=UZFM_WO_ALG&Action=U&BUSINESS_UNIT=POUZL&UZ_WO_ID=`;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tabs
+// ═══════════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const naam = btn.dataset.tab;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${naam}`).classList.add('active');
+    if (naam === 'geschiedenis') laadGeschiedenis();
+    if (naam === 'beheer') renderBeheer(true);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Data laden
+// ═══════════════════════════════════════════════════════════════════════════
+async function laadData() {
+  const res  = await fetch('/api/thuisdialyse?_=' + Date.now());
+  const data = await res.json();
+  allToestellen = data.toestellen || [];
+  document.getElementById('last-sync').textContent =
+    'Bijgewerkt: ' + new Date().toLocaleTimeString('nl-BE');
+  renderStats();
+  renderToestellen();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stats balk
+// ═══════════════════════════════════════════════════════════════════════════
+function renderStats() {
+  const totaal  = allToestellen.length;
+  const actief  = allToestellen.filter(t => t.laatste_status === 'INUITV').length;
+  const nu      = new Date();
+  // Toestellen waarvan laatste staalname > 3 maanden geleden
+  const oud     = allToestellen.filter(t => {
+    if (!t.datum_laatste_staalname) return true;
+    const d = new Date(t.datum_laatste_staalname);
+    return (nu - d) > 90 * 86400 * 1000;
+  }).length;
+
+  document.getElementById('stat-row').innerHTML = `
+    <div class="stat-card"><div class="stat-nr">${totaal}</div><div class="stat-lbl">TOESTELLEN</div></div>
+    <div class="stat-card"><div class="stat-nr" style="color:var(--green)">${actief}</div><div class="stat-lbl">IN UITVOERING</div></div>
+    <div class="stat-card"><div class="stat-nr" style="color:var(--yellow)">${oud}</div><div class="stat-lbl">STAALNAME NODIG</div></div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Toestellen tabel
+// ═══════════════════════════════════════════════════════════════════════════
+function datumKlasse(datumStr) {
+  if (!datumStr) return 'datum-geen';
+  const d = new Date(datumStr);
+  const diff = (new Date() - d) / (86400 * 1000);
+  if (diff < 90) return 'datum-ok';
+  return 'datum-oud';
+}
+
+function renderToestellen() {
+  const tbody = document.getElementById('toestellen-body');
+  if (!allToestellen.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty">Geen toestellen — voeg ze toe via "Toestellen Beheren"</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = allToestellen.map(t => {
+    const sel       = geselecteerd.has(t.td_nr);
+    const dKlasse   = datumKlasse(t.datum_laatste_staalname);
+    const dStr      = t.datum_laatste_staalname
+      ? new Date(t.datum_laatste_staalname).toLocaleDateString('nl-BE')
+      : '—';
+    const woLink    = t.laatste_wo_id
+      ? `<a href="${WO_URL}${t.laatste_wo_id}" target="_blank" class="wo-link">${t.laatste_wo || t.laatste_wo_id}</a>`
+      : '<span style="color:var(--muted)">—</span>';
+    const statusBadge = t.laatste_status
+      ? `<span class="badge badge-${t.laatste_status === 'INUITV' ? 'inuitv' : t.laatste_status === 'GOED' ? 'goed' : 'wacht'}">${t.laatste_status}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr style="${sel ? 'background:#eef5ff' : ''}">
+      <td class="cb-wrap"><input type="checkbox" ${sel ? 'checked' : ''} onchange="toggleSelectie(${t.td_nr}, this.checked)"></td>
+      <td><strong style="font-family:var(--mono)">TD${t.td_nr}</strong></td>
+      <td>${t.patient || '—'}</td>
+      <td style="font-family:var(--mono);font-size:13px">${t.maximo || '—'}</td>
+      <td><span class="badge badge-type">${t.toestel_type || '—'}</span></td>
+      <td><span class="${dKlasse}">${dStr}</span></td>
+      <td>${woLink}</td>
+      <td>${statusBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleSelectie(td_nr, checked) {
+  checked ? geselecteerd.add(td_nr) : geselecteerd.delete(td_nr);
+  updateSelectieBalk();
+  renderToestellen();
+}
+
+function updateSelectieBalk() {
+  const n = geselecteerd.size;
+  document.getElementById('selectie-count').textContent =
+    `${n} toestel${n !== 1 ? 'len' : ''} geselecteerd`;
+  document.getElementById('wo-btn').disabled = n === 0;
+}
+
+function selecteerAlle()   { allToestellen.forEach(t => geselecteerd.add(t.td_nr)); updateSelectieBalk(); renderToestellen(); }
+function deselecteerAlle() { geselecteerd.clear(); updateSelectieBalk(); renderToestellen(); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WO's aanmaken
+// ═══════════════════════════════════════════════════════════════════════════
+async function maakWOAan() {
+  if (!geselecteerd.size) return;
+  const btn = document.getElementById('wo-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Bezig...';
+
+  const card = document.getElementById('voortgang-card');
+  card.classList.remove('hidden');
+  const lijst    = document.getElementById('voortgang-lijst');
+  const statusEl = document.getElementById('voortgang-status');
+
+  const tdNummers = [...geselecteerd];
+
+  // ── Debug: start ──────────────────────────────────────────────────────
+  _logIndex = 0;
+  _debugSepGezien = new Set();
+  debugSetStatus('running');
+  debugLog(null, `▶ WO aanmaken gestart voor ${tdNummers.length} toestel(len): TD${tdNummers.join(', TD')}`, 'info');
+  if (!debugOpen) {
+    // Auto-open panel bij start
+    debugOpen = true;
+    document.getElementById('debug-panel').classList.add('open');
+    document.getElementById('debug-toggle-btn').textContent = '▼ VERBERG LOG';
+    document.getElementById('debug-toggle-btn').classList.add('active');
+  }
+
+  lijst.innerHTML = tdNummers.map(nr => {
+    const t = allToestellen.find(x => x.td_nr === nr);
+    return `<div class="progress-item" id="prog-${nr}">
+      <span class="spinner" id="prog-icon-${nr}"></span>
+      <div>
+        <strong>TD${nr}</strong>${t ? ' — ' + t.patient : ''}
+        <div style="font-size:12px;color:var(--muted)">${t ? t.maximo : ''}</div>
+      </div>
+      <div class="progress-details" id="prog-status-${nr}">Wachten...</div>
+    </div>`;
+  }).join('');
+
+  try {
+    debugLog(null, 'API aanroep: /api/thuisdialyse/wo_aanmaken ...', 'info');
+    const res  = await fetch('/api/thuisdialyse/wo_aanmaken', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({td_nummers: tdNummers})
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.fout);
+
+    debugLog(null, `Job gestart: ${data.job_id}`, 'info');
+    statusEl.textContent = `Job ${data.job_id} gestart`;
+    pollJobStatus(data.job_id, btn);
+
+  } catch(e) {
+    debugLog(null, '❌ Fout bij starten: ' + e.message, 'err');
+    debugSetStatus('error');
+    toonAlert('staal', 'error', 'Fout: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = "⚙ WO'S AANMAKEN IN PEOPLESOFT";
+  }
+}
+
+// ── Poll job status (2s interval, index-gebaseerde log-extractie) ─────────────
+let _logIndex      = 0;
+let _debugSepGezien = new Set();
+
+async function pollJobStatus(job_id, btn) {
+  let res, data;
+  try {
+    res  = await fetch(`/api/thuisdialyse/status/${job_id}`);
+    data = await res.json();
+  } catch(e) {
+    debugLog(null, `⚠ Poll-fout: ${e.message} — opnieuw over 2s...`, 'err');
+    setTimeout(() => pollJobStatus(job_id, btn), 2000);
+    return;
+  }
+
+  // ── Nieuwe stap-logs (alleen nieuw via index, geen duplicaten mogelijk) ──
+  const logs  = data.stap_logs || [];
+  const nieuw = logs.slice(_logIndex);
+  _logIndex   = logs.length;
+
+  for (const logEntry of nieuw) {
+    const tdMatch = logEntry.match(/^TD(\d+):\s*(.+)$/);
+    if (tdMatch) {
+      const nr  = parseInt(tdMatch[1]);
+      const msg = tdMatch[2];
+      if (!_debugSepGezien.has(nr)) { _debugSepGezien.add(nr); debugSep(nr); }
+      debugLog(nr, msg);
+    } else {
+      debugLog(null, logEntry);
+    }
+  }
+
+  // ── Voortgangskaart bijwerken ────────────────────────────────────────────
+  for (const r of (data.resultaten || [])) {
+    const icon   = document.getElementById(`prog-icon-${r.td_nr}`);
+    const status = document.getElementById(`prog-status-${r.td_nr}`);
+    if (!icon || !status) continue;
+    if (icon.classList.contains('spinner')) {
+      icon.className = 'progress-icon';
+      if (r.ok) {
+        icon.textContent = '✅';
+        const woUrl = r.wo_id ? `${WO_URL}${r.wo_id}` : null;
+        status.innerHTML = woUrl
+          ? `<a href="${woUrl}" target="_blank" class="wo-link">${r.wo_id}</a> — ${r.status || 'INUITV'}`
+          : `${r.wo_id} — ${r.status || 'INUITV'}`;
+        status.style.color = 'var(--green)';
+        debugLog(r.td_nr, `✓ WO aangemaakt: ${r.wo_id} — ${r.status || 'INUITV'}`, 'ok');
+      } else {
+        icon.textContent = '❌';
+        status.textContent = r.fout || 'Mislukt';
+        status.style.color = 'var(--red)';
+        debugLog(r.td_nr, `❌ Mislukt: ${r.fout || 'Onbekende fout'}`, 'err');
+      }
+    }
+  }
+
+  if (data.bezig) {
+    setTimeout(() => pollJobStatus(job_id, btn), 2000);  // elke 2s
+    return;
+  }
+
+  // ── Klaar ─────────────────────────────────────────────────────────────────
+  const ok   = (data.resultaten || []).filter(r => r.ok).length;
+  const fout = (data.resultaten || []).filter(r => !r.ok).length;
+  document.getElementById('voortgang-status').textContent = `Klaar: ${ok} OK, ${fout} mislukt`;
+  debugLog(null, `════ KLAAR: ${ok} geslaagd, ${fout} mislukt ════`, fout > 0 ? 'err' : 'ok');
+  debugSetStatus(fout > 0 ? 'error' : 'ok');
+  toonAlert('staal', ok > 0 ? 'success' : 'error',
+    `${ok} WO${ok !== 1 ? "'s" : ''} aangemaakt${fout > 0 ? `, ${fout} mislukt` : ''}`);
+  btn.disabled = false;
+  btn.textContent = "⚙ WO'S AANMAKEN IN PEOPLESOFT";
+  geselecteerd.clear();
+  await laadData();
+  updateSelectieBalk();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Geschiedenis
+// ═══════════════════════════════════════════════════════════════════════════
+async function laadGeschiedenis() {
+  const res  = await fetch('/api/thuisdialyse?_=' + Date.now());
+  const data = await res.json();
+  const gesch = (data.geschiedenis || []).slice().reverse();
+  const tbody = document.getElementById('geschiedenis-body');
+
+  if (!gesch.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Nog geen uitgevoerde staalnames</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = gesch.map(g => {
+    const rowStyle  = g.ok ? 'background:#f0fff4' : 'background:#fff5f5';
+    const badge     = g.status === 'INUITV' ? 'badge-inuitv' : g.status === 'GOED' ? 'badge-goed' : 'badge-fout';
+    const woCell    = g.wo_id
+      ? `<a href="${WO_URL}${g.wo_id}" target="_blank" class="wo-link">${g.wo_id}</a>`
+      : (g.fout || '—');
+    return `<tr style="${rowStyle}">
+      <td style="font-family:var(--mono);font-size:12px">${g.datum || '—'}</td>
+      <td><strong>TD${g.td_nr}</strong></td>
+      <td>${g.patient || '—'}</td>
+      <td style="font-family:var(--mono);font-size:12px">${g.maximo || '—'}</td>
+      <td>${woCell}</td>
+      <td>${g.status ? `<span class="badge ${badge}">${g.status}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function wisGeschiedenis() {
+  if (!confirm('Wis alle geschiedenis? Dit kan niet ongedaan worden.')) return;
+  await fetch('/api/thuisdialyse/geschiedenis/wis', {method: 'POST'});
+  laadGeschiedenis();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Beheer
+// ═══════════════════════════════════════════════════════════════════════════
+function renderBeheer(herlaadVanServer = true) {
+  if (herlaadVanServer) {
+    beheerLijst = JSON.parse(JSON.stringify(allToestellen));
+  }
+  const tbody = document.getElementById('beheer-body');
+  document.getElementById('beheer-count').textContent = `${beheerLijst.length} toestellen`;
+
+  if (!beheerLijst.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty">Geen toestellen — gebruik het formulier hieronder of importeer uit Excel</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = beheerLijst.map((t, idx) => `
+    <tr>
+      <td style="font-family:var(--mono)">TD${t.td_nr}</td>
+      <td>${t.patient || '—'}</td>
+      <td style="font-family:var(--mono);font-size:13px">${t.maximo || '—'}</td>
+      <td><span class="badge badge-type">${t.toestel_type || '—'}</span></td>
+      <td><span class="${datumKlasse(t.datum_laatste_staalname)}">${t.datum_laatste_staalname
+        ? new Date(t.datum_laatste_staalname).toLocaleDateString('nl-BE') : '—'}</span></td>
+      <td><button class="btn btn-sm btn-danger" onclick="verwijderToestel(${idx})">✕</button></td>
+    </tr>`).join('');
+}
+
+function voegToestelToe() {
+  const td_nr   = parseInt(document.getElementById('nieuw-td').value);
+  const patient = document.getElementById('nieuw-patient').value.trim();
+  const maximo  = document.getElementById('nieuw-maximo').value.trim().toUpperCase();
+  const type    = document.getElementById('nieuw-type').value.trim() || 'AK98';
+
+  if (!td_nr || !patient || !maximo) {
+    toonAlert('beheer', 'error', 'Vul TD nummer, patiënt en Maximo in');
+    return;
+  }
+  if (beheerLijst.some(t => t.td_nr === td_nr)) {
+    toonAlert('beheer', 'error', `TD${td_nr} bestaat al`);
+    return;
+  }
+  beheerLijst.push({td_nr, patient, maximo, toestel_type: type,
+    datum_laatste_staalname: null, laatste_status: null, laatste_wo: null, laatste_wo_id: null});
+  beheerLijst.sort((a, b) => a.td_nr - b.td_nr);
+  document.getElementById('nieuw-td').value      = '';
+  document.getElementById('nieuw-patient').value = '';
+  document.getElementById('nieuw-maximo').value  = '';
+  renderBeheer(false);  // bewaar lokale wijzigingen, laad NIET opnieuw van server
+}
+
+function verwijderToestel(idx) {
+  if (!confirm(`TD${beheerLijst[idx].td_nr} — ${beheerLijst[idx].patient} verwijderen?`)) return;
+  beheerLijst.splice(idx, 1);
+  renderBeheer(false);  // bewaar lokale wijzigingen
+}
+
+async function slaToestellenOp() {
+  try {
+    const res = await fetch('/api/thuisdialyse/toestellen', {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({toestellen: beheerLijst})
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.fout || `Server fout ${res.status}`);
+    }
+    toonAlert('beheer', 'success', 'Toestellen opgeslagen!');
+    await laadData();
+  } catch(e) {
+    toonAlert('beheer', 'error', 'Fout: ' + e.message);
+  }
+}
+
+// ─── Excel import (client-side via /api/import_excel) ───
+async function importeerExcel() {
+  const fileInput = document.getElementById('excel-file');
+  const file = fileInput.files[0];
+  if (!file) { toonAlert('beheer', 'error', 'Kies eerst een .xlsm bestand'); return; }
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  toonAlert('beheer', 'info', 'Importeren...');
+  try {
+    const res  = await fetch('/api/thuisdialyse/import_excel', {method: 'POST', body: formData});
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.fout);
+    toonAlert('beheer', 'success', `${data.aangeleverd} toestellen geïmporteerd`);
+    await laadData();
+    renderBeheer();
+    fileInput.value = '';
+  } catch(e) {
+    toonAlert('beheer', 'error', 'Importfout: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Hulp
+// ═══════════════════════════════════════════════════════════════════════════
+function toonAlert(zone, type, bericht) {
+  const el = document.getElementById(`alert-${zone}`);
+  el.className = `alert alert-${type}`;
+  el.innerHTML = `<span>${bericht}</span><button onclick="this.parentElement.classList.add('hidden')" style="background:none;border:none;cursor:pointer;font-size:16px">×</button>`;
+  el.classList.remove('hidden');
+  if (type !== 'error') setTimeout(() => el.classList.add('hidden'), 5000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════════════════════════════
+laadData();
+</script>
+
+// ── Headless toggle ──
+async function setHeadless(val) {
+  try {
+    await fetch('/api/dialyse-resultaten/headless', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({headless: val})
+    });
+  } catch(e) {}
+}
+
+fetch('/api/dialyse-resultaten/config')
+  .then(r => r.json())
+  .then(d => {
+    const el = document.getElementById('tgl-headless');
+    if (el && d.headless !== undefined) el.checked = !!d.headless;
+  }).catch(() => {});
+
+<script>
+(function() {
+  var _start = null;
+  setInterval(async function() {
+    try {
+      var r = await fetch("/api/ping").then(function(x){return x.json();});
+      if (_start === null) { _start = r.start; return; }
+      if (r.start !== _start) { location.reload(); }
+    } catch(e) {}
+  }, 3000);
+})();
+</script>
+</body>
+</html>
