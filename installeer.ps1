@@ -92,14 +92,14 @@ try {
 }
 
 # - Stap 4b: Playwright Chromium installeren -------------
-Schrijf-Stap "4/5" "Playwright browser installeren (Microsoft Edge)..."
+Schrijf-Stap "4/5" "Playwright browser installeren (Chromium)..."
 Schrijf-Info "Dit kan enkele minuten duren..."
 try {
     python -m playwright install chromium
-    Schrijf-Ok "Microsoft Edge (Playwright) geinstalleerd"
+    Schrijf-Ok "Chromium (Playwright) geinstalleerd"
 } catch {
-    Schrijf-Fout "Playwright msedge installatie mislukt."
-    Schrijf-Info "Probeer handmatig: python -m playwright install msedge"
+    Schrijf-Fout "Playwright Cromeium installatie mislukt."
+    Schrijf-Info "Probeer handmatig: python -m playwright install chromium"
     Read-Host "Druk Enter om af te sluiten"
     exit 1
 }
