@@ -93,6 +93,7 @@ werkorder-dashboard/
 ├── scraper.py                Playwright-scraper die periodiek PeopleSoft-werkorders ophaalt
 ├── crypto_utils.py           Versleutelde opslag van het PeopleSoft-wachtwoord
 ├── uitvoerder_utils.py       Bepaalt welke OPRID als "Uitvoerder" ingevuld wordt per gebruiker
+├── onedrive_sync.py          Spiegelt *.json/*.txt naar OneDrive voor een lees-only kopie buiten het netwerk
 │
 ├── wo_aanmaken.py            WO aanmaken voor thuisdialyse-stalen (Playwright)
 ├── wo_ro_staalname.py        RO-staalname WO's opzoeken
@@ -127,3 +128,29 @@ Buiten die uren slaapt de scraper maar blijft het dashboard bereikbaar.
 ## Manuele refresh
 In het dashboard staat een "↻ VERNIEUWEN"-knop om op elk moment handmatig een nieuwe
 scrape te starten.
+
+## OneDrive-sync (draaien op een pc buiten het netwerk)
+Als meerdere pc's op kantoor vanaf dezelfde gedeelde map draaien (bv.
+`Z:\APPLICATIE WO\werkorder-dashboard`), is er telkens één **scraper-master**
+(zie `scraper.lock`) die effectief bij PeopleSoft aanmeldt; de rest leest gewoon mee.
+
+Wil je de app ook draaien op een pc **buiten** het UZ Leuven-netwerk (bv. thuis)? Zet
+op die pc een volledige, aparte kopie van de applicatie (bv. via git) in een map die
+via OneDrive synct. Die pc kan niet bij PeopleSoft, maar toont via `onedrive_sync.py`
+wel de actuele data — automatisch in "Leesmodus" (zie hierboven).
+
+Zet daarvoor in `config.json` van de **scraper-master**:
+```json
+"onedrive_sync": {
+  "enabled": true,
+  "pad": "C:\\Users\\jouw_naam\\OneDrive - UZ Leuven\\werkorder-dashboard",
+  "sync_config": false
+}
+```
+- Enkel de scraper-master kopieert; op de andere pc's gebeurt niets.
+- Elke wijziging aan een `.json`- of `.txt`-bestand in de root wordt (met korte
+  vertraging) automatisch gekopieerd naar `pad`.
+- `config.json` en `secret.key` (je PeopleSoft-inloggegevens) worden **nooit**
+  gesynct, tenzij je `sync_config` bewust op `true` zet.
+- Submappen (`logs/`, `uploads/`, ...) en `.py`/`.html`-bestanden worden niet
+  meegenomen — die code krijg je op de tweede pc via git.
