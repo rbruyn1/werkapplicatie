@@ -28,7 +28,7 @@
       "verwerking": ["strip", "join_whitespace"]
     },
     "activiteit_tekst": {
-      "patroon": "Delivered services\\s*\\n(.+?)(?:\\nServices are delivered|\\Z)",
+      "patroon": "Delivered services\\s*\\n(.+?)(?:\\nServices are delivered|\\nSiemens Healthcare NV/SA|\\Z)",
       "verwerking": ["strip", "join_whitespace"]
     }
   },

@@ -37,3 +37,31 @@ handgeschreven `_extraheer_siemens()` in `wo_service_rapport.py`
 Dit is een **voorstel**, nog niet ingeschakeld. Zie de openstaande vragen
 die hierover gesteld zijn voor de beslissingen die nog genomen moeten
 worden vóór dit de bestaande `_extraheer_<vendor>()`-functies vervangt.
+
+## Bevindingen uit reële voorbeelden (Siemens, ProCare, Radiometer, Stryker, Terumo, B.Braun)
+
+- **Siemens, Radiometer**: volledig 1-op-1 declaratief te vangen, bewezen
+  identiek resultaat tussen sjabloon en Python-functie.
+- **ProCare**: gedeeltelijk. `sn`/`product`/`werkorder_nr`/`datum`/
+  `type_verzoek`/bonus-`t_nummer` werken declaratief. `omschrijving_kort`
+  niet: door de kolomlay-out van de brontabel komt een label
+  ("Samenvatting uitgevoerde werkzaamheden") *middenin* de waarde terecht,
+  en moet er met een aparte regex-substitutie uit geknipt worden. Het
+  huidige sjabloonformaat (`patroon` + orde van `verwerking`-stappen) kan
+  dat nog niet uitdrukken - zou een nieuwe stap-soort vereisen zoals
+  `{"verwijder": "regex"}`.
+- **Stryker**: niet in JSON-sjabloon gezet. Deze rapporten lopen vaak tot
+  50+ pagina's (bijgevoegde foto's/QC-datasheets), en een volledige
+  tekst-extractie duurde in de praktijk **80+ seconden** - veel te traag
+  voor een interactieve upload. De Python-functie leest daarom bewust
+  zelf slechts de eerste 3 pagina's via een eigen `pdfplumber`-call, in
+  plaats van de al ingelezen `tekst`-parameter te gebruiken zoals alle
+  andere extractors. **Dit is de belangrijkste, nog onbeantwoorde vraag
+  voor het sjabloonformaat**: een puur tekst-in/dict-uit sjabloon kan dit
+  soort paginabeperking niet zelf uitdrukken - dat vereist een
+  `"max_paginas": 3`-veld in het sjabloon dat de PDF-lezer (niet de
+  matcher) moet respecteren.
+- Als gevolg hiervan is de hoofddispatcher (`extraheer_sn_uit_pdf` in
+  `wo_service_rapport.py`) aangepast: detectie gebeurt nu op maximaal de
+  eerste **5** pagina's in plaats van het volledige document, met een
+  volledige herlezing enkel als terugval bij een écht onbekend formaat.

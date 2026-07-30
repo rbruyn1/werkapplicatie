@@ -190,12 +190,17 @@ def sr_verwijder(rapport_id: str):
 
 # ── SN-extractie uit PDF ──────────────────────────────────────────────────────
 
-def _pdf_tekst(pdf_pad: str | Path) -> str:
-    """Haal alle tekst op uit een PDF via pdfplumber."""
+def _pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
+    """Haal tekst op uit een PDF via pdfplumber. Met max_paginas beperkt tot
+    de eerste N pagina's - belangrijk voor rapporten met tientallen
+    bijgevoegde foto-/datasheet-pagina's (bv. Stryker), waar volledige
+    extractie 80+ seconden kan duren terwijl alle bruikbare velden altijd
+    al op de eerste paar pagina's staan."""
     tekst = ""
     try:
         with pdfplumber.open(str(pdf_pad)) as pdf:
-            for page in pdf.pages:
+            paginas = pdf.pages[:max_paginas] if max_paginas else pdf.pages
+            for page in paginas:
                 tekst += (page.extract_text() or "") + "\n"
     except Exception as e:
         tekst = f"[PDF LEESFOUT: {e}]"
@@ -218,6 +223,12 @@ def _detecteer_formaat(tekst: str) -> str:
         return "terumo"
     if "Siemens Healthcare" in tekst and "Service report" in tekst:
         return "siemens"
+    if "ProCare" in tekst and "Rapportnummer" in tekst:
+        return "procare"
+    if "SERVICERAPPORT" in tekst and "Radiometer" in tekst:
+        return "radiometer"
+    if "Field Service Report" in tekst and "Service Report #:" in tekst:
+        return "stryker"
     return "onbekend"
 
 
@@ -634,7 +645,10 @@ def _extraheer_siemens(tekst: str) -> dict:
         omschrijving_kort = " ".join(m.group(1).split())
 
     activiteit_tekst = ""
-    m = re.search(r"Delivered services\s*\n(.+?)(?:\nServices are delivered|$)", tekst, re.DOTALL)
+    m = re.search(
+        r"Delivered services\s*\n(.+?)(?:\nServices are delivered|\nSiemens Healthcare NV/SA|\Z)",
+        tekst, re.DOTALL
+    )
     if m:
         activiteit_tekst = " ".join(m.group(1).split())
 
@@ -652,12 +666,195 @@ def _extraheer_siemens(tekst: str) -> dict:
     return info
 
 
+def _extraheer_procare(tekst: str) -> dict:
+    """ProCare B.V. - tweekolommen-tabel (label/waarde), Nederlandstalig."""
+    sn = ""
+    product = ""
+    firma = "ProCare"
+    werkorder_nr = ""
+    datum = ""
+    type_verzoek = ""
+    uren_arbeid = ""
+    t_nummer = ""
+
+    m = re.search(r"Rapportnummer\s+(\S+)", tekst)
+    if m:
+        werkorder_nr = m.group(1).strip()
+
+    m = re.search(r"Serienummer fabrikant\s+(\S+)", tekst)
+    if m:
+        sn = m.group(1).strip()
+
+    # UZ Leuven-registratienummer (T-nummer) staat vaak al rechtstreeks in
+    # het rapport, net als bij Siemens.
+    m = re.search(r"Registratienummer klant\s+(\S+)", tekst)
+    if m:
+        t_nummer = m.group(1).strip()
+
+    m = re.search(r"Apparaat omschrijving\s+(.+?)\nSerienummer fabrikant", tekst, re.DOTALL)
+    if m:
+        product = " ".join(m.group(1).split())
+
+    m = re.search(r"Service type\s+([^\n]+)", tekst)
+    if m:
+        type_verzoek = m.group(1).strip()
+
+    m = re.search(r"Onderhoudsdatum\s+(\d{2}-\d{2}-\d{4})", tekst)
+    if m:
+        datum = m.group(1).strip()
+
+    # De 'Samenvatting uitgevoerde werkzaamheden'-tabelrij: pdfplumber plaatst
+    # het label-tekstje tussen de twee regels van de (meerregelige) waarde in
+    # door de kolomlay-out - het label wordt er hier tussenuit geknipt.
+    omschrijving_kort = ""
+    m = re.search(
+        r"Service door derden \(SDER\)\s*\n(.+?)\nEventuele vervolgacties",
+        tekst, re.DOTALL
+    )
+    if m:
+        blok = re.sub(r"Samenvatting uitgevoerde werkzaamheden\n?", "", m.group(1))
+        omschrijving_kort = " ".join(blok.split())
+
+    info = {
+        "sn": sn, "product": product, "firma": firma,
+        "werkorder_nr": werkorder_nr, "datum": datum,
+        "type_verzoek": type_verzoek, "uren_arbeid": uren_arbeid,
+        "omschrijving_kort": omschrijving_kort,
+        "activiteit_tekst": omschrijving_kort,
+        "oplossing": omschrijving_kort,
+        "formaat": "procare",
+    }
+    if t_nummer:
+        info["t_nummer"] = t_nummer
+    return info
+
+
+def _extraheer_radiometer(tekst: str) -> dict:
+    """Radiometer Benelux 'SERVICERAPPORT'. Onderzoek/Reparatie staan als
+    naast-elkaar-kolommen die door de tekst-extractie interleaven - enkel
+    de bovenste 'Omschrijving'-regel (kort en eenduidig) wordt gebruikt
+    voor omschrijving_kort; Onderzoek+Reparatie samen (niet perfect
+    gesplitst) voor activiteit_tekst."""
+    sn = ""
+    product = ""
+    firma = "Radiometer"
+    werkorder_nr = ""
+    datum = ""
+    type_verzoek = ""
+    uren_arbeid = ""
+
+    m = re.search(r"Rapport nr\.\s+(\S+)", tekst)
+    if m:
+        werkorder_nr = m.group(1).strip()
+
+    m = re.search(r"Serie nr\.\s+(\S+)", tekst)
+    if m:
+        sn = m.group(1).strip()
+
+    m = re.search(r"Instrument/Type\s+(.+?)\s+Rapport nr\.", tekst)
+    if m:
+        product = m.group(1).strip()
+
+    omschrijving_kort = ""
+    m = re.search(r"Omschrijving\s+(.+?)\s+Start Werk", tekst)
+    if m:
+        omschrijving_kort = m.group(1).strip()
+
+    m = re.search(r"Start Werk\s+(\d{1,2}/\d{1,2}/\d{4})", tekst)
+    if m:
+        datum = m.group(1).strip()
+
+    activiteit_tekst = ""
+    m = re.search(r"Onderzoek Reparatie\s*\n(.+?)\nKalibratie OK\?", tekst, re.DOTALL)
+    if m:
+        activiteit_tekst = " ".join(m.group(1).split())
+
+    return {
+        "sn": sn, "product": product, "firma": firma,
+        "werkorder_nr": werkorder_nr, "datum": datum,
+        "type_verzoek": type_verzoek, "uren_arbeid": uren_arbeid,
+        "omschrijving_kort": omschrijving_kort,
+        "activiteit_tekst": activiteit_tekst,
+        "oplossing": activiteit_tekst,
+        "formaat": "radiometer",
+    }
+
+
+def _extraheer_stryker(pdf_pad: str | Path) -> dict:
+    """Stryker 'Field Service Report'. LET OP: deze rapporten lopen vaak
+    tot 50+ pagina's (bijgevoegde foto's en QC-testdatasheets), en volledige
+    tekst-extractie van zo'n bestand kan 80+ seconden duren terwijl alle
+    bruikbare velden altijd al binnen de eerste paar pagina's staan. Deze
+    functie leest daarom bewust slechts de eerste 3 pagina's, in
+    tegenstelling tot de andere extractors die de al ingelezen volledige
+    tekst als parameter krijgen."""
+    tekst = ""
+    try:
+        import pdfplumber as _plb
+        with _plb.open(str(pdf_pad)) as _pdf:
+            for _pagina in _pdf.pages[:3]:
+                tekst += (_pagina.extract_text() or "") + "\n"
+    except Exception:
+        pass
+
+    sn = ""
+    product = ""
+    firma = "Stryker"
+    werkorder_nr = ""
+    datum = ""
+    type_verzoek = ""
+    uren_arbeid = ""
+
+    m = re.search(r"Service Report #:\s*(\S+)", tekst)
+    if m:
+        werkorder_nr = m.group(1).strip()
+
+    m = re.search(r"Asset #:\s*(\S+)", tekst)
+    if m:
+        sn = m.group(1).strip()
+
+    m = re.search(r"Call Type:\s*([^\n]+)", tekst)
+    if m:
+        type_verzoek = m.group(1).strip()
+
+    m = re.search(r"Subject:\s*\n([^\n]+)", tekst)
+    if m:
+        omschrijving_kort = m.group(1).strip()
+    else:
+        omschrijving_kort = ""
+
+    m = re.search(r"(\w+ \d{1,2}(?:st|nd|rd|th)?,\s*\d{4})", tekst)
+    if m:
+        datum = m.group(1).strip()
+
+    activiteit_tekst = ""
+    m = re.search(r"\n(\d+\..+?)\nParts Installed", tekst, re.DOTALL)
+    if m:
+        activiteit_tekst = " ".join(m.group(1).split())
+
+    return {
+        "sn": sn, "product": product, "firma": firma,
+        "werkorder_nr": werkorder_nr, "datum": datum,
+        "type_verzoek": type_verzoek, "uren_arbeid": uren_arbeid,
+        "omschrijving_kort": omschrijving_kort,
+        "activiteit_tekst": activiteit_tekst,
+        "oplossing": activiteit_tekst,
+        "formaat": "stryker",
+    }
+
+
 def extraheer_sn_uit_pdf(pdf_pad: str | Path) -> dict:
     """
     Hoofd-functie: extraheer serienummer en metadata uit een service-rapport PDF.
     Geeft dict terug met: sn, product, firma, datum, type_verzoek, uren_arbeid, formaat
+
+    Detectie gebeurt bewust op maximaal de eerste 5 pagina's: alle bekende
+    formaten zijn 1-3 pagina's, en sommige rapporten (bv. Stryker) hebben
+    tientallen extra foto-/datasheet-pagina's waarbij een volledige lezing
+    80+ seconden zou duren. Enkel bij een écht onbekend formaat wordt
+    alsnog het hele document gelezen voor de generieke terugvalpoging.
     """
-    tekst = _pdf_tekst(pdf_pad)
+    tekst = _pdf_tekst(pdf_pad, max_paginas=5)
     formaat = _detecteer_formaat(tekst)
 
     if formaat == "vantive":
@@ -674,7 +871,20 @@ def extraheer_sn_uit_pdf(pdf_pad: str | Path) -> dict:
         info = _extraheer_terumo(tekst)
     elif formaat == "siemens":
         info = _extraheer_siemens(tekst)
+    elif formaat == "procare":
+        info = _extraheer_procare(tekst)
+    elif formaat == "radiometer":
+        info = _extraheer_radiometer(tekst)
+    elif formaat == "stryker":
+        # Eigen, opnieuw pagina-beperkte lezing (zie docstring van de
+        # functie) - de al ingelezen 'tekst' hierboven wordt niet gebruikt.
+        info = _extraheer_stryker(pdf_pad)
     else:
+        # Formaat niet herkend binnen de eerste 5 pagina's: alsnog het
+        # volledige document lezen voor de generieke terugvalpoging (kan
+        # traag zijn bij een groot onbekend document, maar dat is dan
+        # onvermijdelijk zonder formaat-specifieke kennis).
+        tekst = _pdf_tekst(pdf_pad)
         # Generieke fallback: probeer alle bekende patronen
         info = {"sn": "", "product": "", "firma": "Onbekend", "formaat": "onbekend",
                 "datum": "", "type_verzoek": "", "uren_arbeid": "", "werkorder_nr": "",
