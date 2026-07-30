@@ -967,13 +967,42 @@
         body:    JSON.stringify({ groep: groep, waarde: checked })
       });
       const data = await r.json();
-      if (!data.ok) throw new Error(data.fout || 'onbekende fout');
+      if (!r.ok || !data.ok) throw new Error(`HTTP ${r.status} — ${data.fout || 'onbekende fout'}`);
       CCS_SKIP = data.skip;
-      dbgLog(`CCS skip-bestelling groep ${groep} → ${checked ? 'AAN (1x overslaan)' : 'UIT'}`);
+      dbgLog(`CCS skip-bestelling groep ${groep} → ${checked ? 'AAN (1x overslaan)' : 'UIT'} `
+           + `[host=${data.host || '?'}]`);
     } catch (e) {
-      dbgLog('CCS skip-bestelling fout: ' + e);
+      dbgLog('CCS skip-bestelling FOUT bij opslaan: ' + e);
       const el = document.getElementById('ccs-skip-' + groep);
       if (el) el.checked = !checked;   // terugdraaien bij fout
+    }
+  }
+
+  // Los van fetchROLogs() (die enkel ververst bij gewijzigde RO-timestamp):
+  // de skip-toggle kan op elke pc afzonderlijk gewijzigd worden, dus die
+  // moet altijd elke cyclus opnieuw opgehaald en in de checkboxen gezet worden.
+  let _ccsSkipDebugTeller = 0;
+  async function syncCcsSkip() {
+    try {
+      const r = await fetch('/api/ccs/skip-bestelling?_=' + Date.now(), { cache: 'no-store' });
+      const data = await r.json();
+      if (!data.ok || !data.skip) return;
+      CCS_SKIP = data.skip;
+      for (const groep of Object.keys(CCS_SKIP)) {
+        const el = document.getElementById('ccs-skip-' + groep);
+        // niet overschrijven terwijl de gebruiker het vakje net zelf aan het bewerken is
+        if (el && el !== document.activeElement) el.checked = CCS_SKIP[groep];
+      }
+      // Elke ~10e poll (±50s) een diagnoseregel loggen: welk bestand/host/tijdstip
+      // deze pc effectief terugkrijgt van de server — handig om cross-pc sync te checken.
+      _ccsSkipDebugTeller++;
+      if (_ccsSkipDebugTeller % 10 === 1) {
+        const mtijd = data.mtime ? new Date(data.mtime * 1000).toLocaleTimeString('nl-BE') : '?';
+        dbgLog(`CCS skip-sync: host=${data.host} pad=${data.pad} mtime=${mtijd} `
+             + `skip=${JSON.stringify(CCS_SKIP)}`);
+      }
+    } catch (e) {
+      dbgLog('CCS skip-sync FOUT: ' + e);
     }
   }
   fetch('/api/ccs/config').then(r => r.json()).then(d => {
@@ -1834,12 +1863,14 @@
   fetchROConfig().then(() => fetchROLogs(true));
   fetchHRConfig().then(() => fetchROLogs(true));
   fetchAlerts();
+  syncCcsSkip();
   // Werkorders: elke 15s
   setInterval(() => fetchData(), 15_000);
   // Error log kaartjes: elke 60s
   setInterval(() => fetchErrorLogs(), 60_000);
   // RO logs: elke 5s, maar enkel re-render bij gewijzigde timestamp
   setInterval(() => fetchROLogs(), 5_000);
+  setInterval(() => syncCcsSkip(), 5_000);
   // Alerts (RO persistent + overige): elke 3s
   setInterval(() => fetchAlerts(), 3_000);
   // Verbindingscheck: elke 5s
