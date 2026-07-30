@@ -31,5 +31,10 @@
   },
   "matrix_url": "https://jouw-matrix-server",
   "matrix_token": "VUL_MATRIX_TOKEN_IN",
-  "matrix_room": "!jouw-room-id:jouw-matrix-server"
+  "matrix_room": "!jouw-room-id:jouw-matrix-server",
+  "onedrive_sync": {
+    "enabled": false,
+    "pad": "C:\\Users\\jouw_naam\\OneDrive - UZ Leuven\\werkorder-dashboard",
+    "sync_config": false
+  }
 }
