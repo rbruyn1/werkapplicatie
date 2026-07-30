@@ -69,12 +69,29 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 def _schrijf_json_atomisch(pad: Path, data):
     """Schrijft JSON atomisch: eerst naar .tmp, dan rename.
-    Zo is het bestand nooit half-geschreven bij een crash."""
+    Zo is het bestand nooit half-geschreven bij een crash.
+
+    Fallback: op een netwerkshare heeft niet elk account Delete-rechten op
+    het doelbestand (nodig om te overschrijven via rename — Windows/NTFS
+    vereist dit, ook al is Write/Modify wel toegestaan). Als de rename
+    faalt met een permissiefout, schrijven we in dat geval rechtstreeks
+    (niet-atomisch) naar het doelbestand, zodat schrijven blijft werken
+    voor accounts die enkel Write (geen Delete) hebben op dit bestand.
+    """
     tmp = pad.with_suffix(".tmp")
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         tmp.replace(pad)
+    except PermissionError as e:
+        log.warning(f"Atomische rename mislukt voor {pad} (permissie — vermoedelijk geen "
+                    f"Delete-recht op doelbestand): {e}. Val terug op rechtstreeks schrijven.")
+        try:
+            tmp.unlink(missing_ok=True)
+        except Exception:
+            pass
+        with open(pad, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception:
         try:
             tmp.unlink(missing_ok=True)
@@ -163,6 +180,7 @@ ESS_BEST_PATH = Path(__file__).parent / "ess_bestellingen.json"
 
 _scraper_stop = threading.Event()
 
+
 def stuur_matrix_bericht(bericht: str):
     """Verstuurt een Matrix-notificatie. Credentials komen uit config.json
     (velden matrix_url / matrix_token / matrix_room) in plaats van
@@ -189,6 +207,11 @@ def stuur_matrix_bericht(bericht: str):
         log.info(f"Matrix bericht verzonden: {bericht}")
     except Exception as e:
         log.error(f"Matrix notificatie mislukt: {e}")
+
+
+# Enige pc die containerbestellingen (ESS + WO) mag uitvoeren.
+# Service rapporten e.d. blijven wel lokaal op elke pc mogelijk.
+CONTAINER_BESTELLING_MASTER_PC = "UZLDT11866"
 
 
 def is_scraper_master() -> bool:
@@ -384,6 +407,11 @@ def start_background_scraper():
         login_status = {"ok": True, "bericht": bericht}
         return
     threading.Thread(target=update_lock_ping, daemon=True, name="lock-ping").start()
+    try:
+        from onedrive_sync import start_onedrive_sync
+        start_onedrive_sync(cfg)
+    except Exception as e:
+        log.error(f"OneDrive-sync kon niet gestart worden: {e}")
     login_status = {"ok": None, "bericht": "Aanmelden..."}
 
     def _loop():
@@ -786,7 +814,18 @@ def _ccs_groep_van_container(container: str) -> str:
 @app.route("/api/ccs/skip-bestelling", methods=["GET", "POST"])
 def api_ccs_skip_bestelling():
     if request.method == "GET":
-        return jsonify({"ok": True, "skip": _ccs_skip_lezen()})
+        resp = jsonify({
+            "ok": True,
+            "skip": _ccs_skip_lezen(),
+            "pad": str(CCS_SKIP_PAD),
+            "mtime": CCS_SKIP_PAD.stat().st_mtime if CCS_SKIP_PAD.exists() else None,
+            "host": socket.gethostname(),
+        })
+        # Nooit cachen — dit moet elke poll het live bestand teruggeven,
+        # ook via eventuele netwerkproxy's tussen browser en server.
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        return resp
 
     payload = request.get_json(force=True) or {}
     groep   = str(payload.get("groep", "")).strip()
@@ -794,11 +833,20 @@ def api_ccs_skip_bestelling():
     if groep not in CCS_GROEPEN:
         return jsonify({"ok": False, "fout": "Ongeldige CCS-groep"}), 400
 
-    data = _ccs_skip_lezen()
-    data[groep] = waarde
-    _ccs_skip_schrijven(data)
-    log.info(f"CCS skip-bestelling groep {groep} -> {waarde}")
-    return jsonify({"ok": True, "skip": data})
+    try:
+        data = _ccs_skip_lezen()
+        data[groep] = waarde
+        _ccs_skip_schrijven(data)
+    except Exception as e:
+        log.error(f"CCS skip-bestelling schrijven mislukt (groep {groep} -> {waarde}) "
+                  f"op host {socket.gethostname()}: {e}", exc_info=True)
+        return jsonify({"ok": False, "fout": f"Schrijven mislukt: {e}"}), 500
+
+    log.info(f"CCS skip-bestelling groep {groep} -> {waarde} (host {socket.gethostname()}, "
+             f"pad {CCS_SKIP_PAD})")
+    resp = jsonify({"ok": True, "skip": data, "host": socket.gethostname()})
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
 
 
 def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: str):
@@ -811,8 +859,24 @@ def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: st
     from wo_aanmaken import login, maak_wo_ccs_container, PS_HEADLESS
     from ess_bestelling import maak_ess_aanvraag, vat_info as _ess_vat_info
 
+    hostname = socket.gethostname()
+
     def _stap_log(msg):
         job["log"].append(msg)
+
+    # ── Containerbestellingen mogen uitsluitend door de master-scraper-pc ──
+    if hostname.upper() != CONTAINER_BESTELLING_MASTER_PC:
+        fout = (f"Containerbestelling geweigerd: alleen pc '{CONTAINER_BESTELLING_MASTER_PC}' "
+                f"mag dit uitvoeren (deze pc: '{hostname}')")
+        log.warning(f"CCS bestelling geweigerd op pc '{hostname}' (vereist: {CONTAINER_BESTELLING_MASTER_PC}) — container={container}")
+        _stap_log(f"❌ {fout}")
+        job["status"]    = "fout"
+        job["resultaat"] = {"ok": False, "fout": fout, "pc": hostname}
+        if dedup_key:
+            app.config.pop(dedup_key, None)
+        return
+
+    log.info(f"CCS bestelling gestart door pc '{hostname}' — container={container}")
 
     async def _aanmaken():
         async with async_playwright() as pw:
@@ -861,7 +925,7 @@ def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: st
         job["resultaat"] = res
         if dedup_key:
             app.config[dedup_key]["status"] = "klaar"
-        log.info(f"CCS aanmaken klaar — container={container}, wo_id={res.get('wo_id')}, ok={res.get('ok')}")
+        log.info(f"CCS aanmaken klaar op pc '{hostname}' — container={container}, wo_id={res.get('wo_id')}, ok={res.get('ok')}")
     except Exception as exc:
         import traceback
         job["status"]    = "fout"
@@ -1928,6 +1992,7 @@ def log_ess_bestelling(container: str, wo_res: dict):
     entry = {
         "id":             int(datetime.now().timestamp() * 1000),
         "tijdstip":       datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "pc":             socket.gethostname(),
         "container":      container,
         "label":          container,
         "vat_type":       vat_info.get("type"),
@@ -2884,6 +2949,11 @@ def api_shutdown():
 if __name__ == "__main__":
     import atexit
     atexit.register(verwijder_lock)   # lock opruimen bij normaal afsluiten
+    try:
+        from onedrive_sync import stop_onedrive_sync
+        atexit.register(stop_onedrive_sync)
+    except Exception:
+        pass
 
     cfg = load_config()
     port = cfg.get("server_port", 5000)
@@ -2930,3 +3000,8 @@ if __name__ == "__main__":
         )
     finally:
         verwijder_lock()   # ook bij Ctrl+C of crash
+        try:
+            from onedrive_sync import stop_onedrive_sync
+            stop_onedrive_sync()
+        except Exception:
+            pass
