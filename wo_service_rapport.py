@@ -216,6 +216,8 @@ def _detecteer_formaat(tekst: str) -> str:
         return "fresenius"
     if "TERUMO BCT" in tekst and "SERIENUMMER:" in tekst and "WERKORDERNUMMER:" in tekst:
         return "terumo"
+    if "Siemens Healthcare" in tekst and "Service report" in tekst:
+        return "siemens"
     return "onbekend"
 
 
@@ -576,6 +578,80 @@ def _extraheer_terumo(tekst: str) -> dict:
     }
 
 
+def _extraheer_siemens(tekst: str) -> dict:
+    """Siemens Healthineers 'Service report' — Serial Number: XXXXX.
+    Twee kolommen (label/waarde links, label/waarde rechts) staan door de
+    tekst-extractie na elkaar op dezelfde regel, bv.
+    'Reported by Dhr Baete Kristof System Name Symbia Intevo Bold' - alle
+    regex'en hieronder ankeren daarom op het label zelf, niet op een vaste
+    positie in de regel."""
+    sn = ""
+    product = ""
+    firma = "Siemens Healthineers"
+    werkorder_nr = ""
+    datum = ""
+    type_verzoek = ""
+    uren_arbeid = ""
+    t_nummer = ""
+
+    m = re.search(r"Serial Number:\s*(\S+)", tekst)
+    if m:
+        sn = m.group(1).strip()
+
+    m = re.search(r"System Name\s+([^\n]+)", tekst)
+    if m:
+        product = m.group(1).strip()
+
+    m = re.search(r"Service Order number\s+(\S+(?:\s*/\s*\S+)?)", tekst)
+    if m:
+        werkorder_nr = m.group(1).strip()
+
+    # 'Date/Time' is de effectieve service-datum (dd.mm.jjjj); 'Call Open
+    # Date' zou ook kunnen maar is de datum van de oproep, niet van de
+    # interventie zelf.
+    m = re.search(r"Date/Time\s+(\d{2}\.\d{2}\.\d{4})", tekst)
+    if m:
+        datum = m.group(1).strip()
+
+    m = re.search(r"Type of activity\s+([^\n]+?)\s+Call Open Date", tekst)
+    if m:
+        type_verzoek = m.group(1).strip()
+
+    m = re.search(r"Labor\(in Hrs\)\s+([\d,\.]+)", tekst)
+    if m:
+        uren_arbeid = m.group(1).strip()
+
+    # Bonus: 'Customer reference' bevat bij UZ Leuven-rapporten vaak al
+    # rechtstreeks het T-nummer (bv. 'T301518 (ZAAL 4)'), waardoor de
+    # PeopleSoft-opzoekstap op serienummer overgeslagen kan worden.
+    m = re.search(r"Customer reference\s+(T\d{3,})", tekst)
+    if m:
+        t_nummer = m.group(1).strip()
+
+    omschrijving_kort = ""
+    m = re.search(r"Reported issue\s*\n(.+?)(?:\nMaterials & hours used|\n\n|$)", tekst, re.DOTALL)
+    if m:
+        omschrijving_kort = " ".join(m.group(1).split())
+
+    activiteit_tekst = ""
+    m = re.search(r"Delivered services\s*\n(.+?)(?:\nServices are delivered|$)", tekst, re.DOTALL)
+    if m:
+        activiteit_tekst = " ".join(m.group(1).split())
+
+    info = {
+        "sn": sn, "product": product, "firma": firma,
+        "werkorder_nr": werkorder_nr, "datum": datum,
+        "type_verzoek": type_verzoek, "uren_arbeid": uren_arbeid,
+        "omschrijving_kort": omschrijving_kort,
+        "activiteit_tekst": activiteit_tekst,
+        "oplossing": activiteit_tekst,
+        "formaat": "siemens",
+    }
+    if t_nummer:
+        info["t_nummer"] = t_nummer
+    return info
+
+
 def extraheer_sn_uit_pdf(pdf_pad: str | Path) -> dict:
     """
     Hoofd-functie: extraheer serienummer en metadata uit een service-rapport PDF.
@@ -596,6 +672,8 @@ def extraheer_sn_uit_pdf(pdf_pad: str | Path) -> dict:
         info = _extraheer_fresenius(tekst)
     elif formaat == "terumo":
         info = _extraheer_terumo(tekst)
+    elif formaat == "siemens":
+        info = _extraheer_siemens(tekst)
     else:
         # Generieke fallback: probeer alle bekende patronen
         info = {"sn": "", "product": "", "firma": "Onbekend", "formaat": "onbekend",
