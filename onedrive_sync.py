@@ -165,8 +165,20 @@ def _poll_loop(doel_map: Path, sync_config: bool, stop_event: threading.Event):
 
 def start_onedrive_sync(cfg: dict):
     """
-    Start de OneDrive-sync-watcher. Doet niets als 'enabled' niet aanstaat,
-    'pad' leeg is, of deze pc geen scraper-master is.
+    Start de OneDrive-sync-watcher. Doet niets als 'enabled' niet aanstaat
+    of 'pad' leeg is.
+
+    LET OP: doet BEWUST geen eigen _is_scraper_master()-check meer als
+    opstart-voorwaarde. app.py (start_background_scraper) heeft dat via
+    is_scraper_master() al bevestigd vlak vóórdat deze functie wordt
+    aangeroepen — een tweede, onafhankelijke herlezing van hetzelfde
+    scraper.lock-bestand (op de netwerkshare) bleek in de praktijk soms
+    een paar milliseconden later een ander resultaat te geven dan de
+    eerste check (race met andere pc's die tegelijk herstarten via
+    start.py se file-watcher), waardoor de sync onterecht niet startte
+    en daarna nooit meer herkanst werd. _is_scraper_master() blijft wel
+    gebruikt in de poll-loop en de event-handler, als doorlopende
+    veiligheidscheck (bv. als deze pc later de master-rol verliest).
     """
     global _observer, _poll_thread, _poll_stop
 
@@ -176,9 +188,6 @@ def start_onedrive_sync(cfg: dict):
     pad_str = (sync_cfg.get("pad") or "").strip()
     if not pad_str:
         log.warning("OneDrive-sync: 'enabled' staat aan maar 'pad' is leeg — sync overgeslagen")
-        return
-    if not _is_scraper_master():
-        log.info("OneDrive-sync: deze pc is geen scraper-master — sync niet gestart")
         return
     if _observer is not None:
         return  # al actief
