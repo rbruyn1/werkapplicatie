@@ -154,3 +154,31 @@ Zet daarvoor in `config.json` van de **scraper-master**:
   gesynct, tenzij je `sync_config` bewust op `true` zet.
 - Submappen (`logs/`, `uploads/`, ...) en `.py`/`.html`-bestanden worden niet
   meegenomen — die code krijg je op de tweede pc via git.
+
+## Beperkt pakket (standalone Service Rapporten + Snelle Werkorder)
+Een collega die enkel service-rapporten wil verwerken en snel een toestel-WO
+wil aanmaken, heeft de rest van de app (dashboard, thuisdialyse, RO-staalname,
+staalresultaten, logs) niet nodig — en dus ook geen draaiende
+PeopleSoft-scraper of OneDrive-sync.
+
+Zet in `config.json` van die installatie:
+```json
+"modus": "beperkt"
+```
+(standaardwaarde is `"volledig"` — ontbreekt het veld, dan verandert er niets)
+
+Gevolgen van `"beperkt"`:
+- Bij het opstarten wordt er **geen** achtergrond-scraper, lock-ping of
+  OneDrive-sync gestart — enkel de Flask-server zelf.
+- De browser opent meteen op **Service Rapporten** in plaats van het
+  dashboard.
+- De menubalk toont enkel "🔧 Service Rapporten" en "⚡ Snelle Werkorder".
+- Elke andere pagina/route stuurt door naar `/service-rapporten` (of geeft
+  een nette 403 op API-aanroepen).
+- Service Rapporten en Snelle Werkorder blijven **volledig functioneel**: die
+  loggen elk zelf per actie in bij PeopleSoft via Playwright, onafhankelijk
+  van de achtergrond-scraper.
+
+Zo'n beperkte installatie is een gewone, aparte kopie van deze repo (eigen
+`config.json`/`secret.key`, niet gedeeld met een volledige installatie) —
+niet iets wat je binnen één en dezelfde draaiende app aan/uit zet.

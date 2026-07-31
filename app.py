@@ -126,6 +126,51 @@ logging.getLogger().addHandler(_file_handler)
 
 app = Flask(__name__)
 
+
+def app_modus() -> str:
+    """'volledig' (standaard) of 'beperkt' - uit config.json, veld 'modus'.
+    Beperkt pakket = enkel Service Rapporten + Snelle Werkorder; geen
+    PeopleSoft-scraper, geen OneDrive-sync, geen dashboard/thuisdialyse/
+    RO-staalname/staalresultaten/logs. Bedoeld voor een standalone-
+    installatie bij een collega die enkel die twee functies nodig heeft."""
+    try:
+        return load_config().get("modus", "volledig")
+    except Exception:
+        return "volledig"
+
+
+# Paden die ook in 'beperkt'-modus bereikbaar blijven. Bewust een
+# ALLOW-lijst (niet een block-lijst): bij een nieuwe route later is de
+# veilige standaard 'niet bereikbaar in beperkt pakket' tot iemand het hier
+# expliciet toevoegt, in plaats van per ongeluk toch open te staan.
+_BEPERKT_TOEGESTANE_PREFIXES = (
+    "/api/ping", "/assets/", "/favicon", "/.well-known/",
+    "/api/current_user", "/api/shutdown",
+    "/service-rapporten", "/api/service-rapporten",
+    "/toestel-werkorder", "/api/toestel-werkorder",
+)
+
+
+@app.before_request
+def _beperk_toegang_indien_nodig():
+    if app_modus() != "beperkt":
+        return None
+    pad = request.path
+    if pad == "/":
+        return redirect("/service-rapporten")
+    if any(pad.startswith(p) for p in _BEPERKT_TOEGESTANE_PREFIXES):
+        return None
+    if pad.startswith("/api/"):
+        return jsonify({"ok": False, "fout": "Niet beschikbaar in beperkt pakket "
+                                               "(enkel Service Rapporten + Snelle Werkorder)."}), 403
+    return redirect("/service-rapporten")
+
+
+@app.context_processor
+def _inject_app_modus():
+    return {"app_modus": app_modus()}
+
+
 # ── Globale JSON error handler: voorkomt HTML 500-pagina's op /api/ routes ──
 @app.errorhandler(Exception)
 def handle_exception(e):
@@ -392,6 +437,15 @@ def start_background_scraper():
     _scraper_stop.set()
     _scraper_stop = threading.Event()
     stop_event    = _scraper_stop
+
+    if app_modus() == "beperkt":
+        # Beperkt pakket heeft geen dashboard/scraper nodig: Service
+        # Rapporten en Snelle Werkorder loggen elk zelf per actie in via
+        # Playwright (zie wo_service_rapport.py / wo_toestel_werkorder.py),
+        # onafhankelijk van deze achtergrond-loop.
+        login_status = {"ok": True, "bericht": "Beperkt pakket - enkel Service Rapporten "
+                                                "+ Snelle Werkorder, geen achtergrond-scraper."}
+        return
 
     cfg = load_config()
     if not cfg.get("username") or cfg.get("username") == "JOU_USERNAME_HIER":
@@ -2968,15 +3022,20 @@ if __name__ == "__main__":
         pass  # geen vorige instantie actief, gewoon doorgaan
 
     start_background_scraper()
-    log.info(f"Dashboard beschikbaar op http://0.0.0.0:{port}")
-    log.info(f"Thuisdialyse beschikbaar op http://0.0.0.0:{port}/thuisdialyse")
-    log.info(f"RO Staalnames beschikbaar op http://0.0.0.0:{port}/ro-staalname")
-    log.info("Collega's kunnen verbinden via http://<jouw-ip>:5000")
+    if app_modus() == "beperkt":
+        log.info(f"Beperkt pakket actief - Service Rapporten op http://0.0.0.0:{port}/service-rapporten")
+        log.info(f"Snelle Werkorder op http://0.0.0.0:{port}/toestel-werkorder")
+    else:
+        log.info(f"Dashboard beschikbaar op http://0.0.0.0:{port}")
+        log.info(f"Thuisdialyse beschikbaar op http://0.0.0.0:{port}/thuisdialyse")
+        log.info(f"RO Staalnames beschikbaar op http://0.0.0.0:{port}/ro-staalname")
+        log.info("Collega's kunnen verbinden via http://<jouw-ip>:5000")
 
     # Browser openen — zoek Chrome of Edge, open als nieuw tabblad in bestaand venster
     def _open_browser():
         import subprocess, shutil
-        url = f"http://localhost:{port}"
+        startpad = "/service-rapporten" if app_modus() == "beperkt" else "/"
+        url = f"http://localhost:{port}{startpad}"
         # Chrome: --new-tab opent tabblad in bestaand venster
         chrome = (
             shutil.which("chrome") or
