@@ -1,0 +1,38 @@
+﻿# Geheimen - nooit committen
+secret.key
+config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyc.*
+
+# Runtime data, logs, gegenereerde output (blijft lokaal per machine)
+logs/
+uploads/
+*.log
+*.lock
+data.json
+ccs_log_data*.json
+ccs_skip_bestelling.json
+dialyse_resultaten_data.json
+error_alerts.json
+error_logs.json
+ess_bestellingen.json
+hr_log_data.json
+ro_log_data*.json
+ro_resultaten_data.json
+ro_staalname.json
+service_rapporten.json
+snelle_werkorder_log.json
+thuisdialyse.json
+lage_temp_log.txt
+melkkoppelingen_log.txt
+
+# Losse dubbels van templates/*.html (Flask leest enkel uit templates/)
+/logs.html
+/service_rapporten.html
+/toestel_werkorder.html
+
+# Oude crash-log dump, geen nuttige broncode
+Nieuw - Tekstdocument.txt

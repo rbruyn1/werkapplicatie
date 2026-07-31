@@ -1,0 +1,2 @@
+Invoke-Expression (Get-Content .installeer.ps1 -Raw)
+python -m playwright install chromium

@@ -1,0 +1,40 @@
+{
+  "naam": "siemens",
+  "firma": "Siemens Healthineers",
+  "detectie": {
+    "bevat_alle": ["Siemens Healthcare", "Service report"]
+  },
+  "velden": {
+    "sn": {
+      "patroon": "Serial Number:\\s*(\\S+)"
+    },
+    "product": {
+      "patroon": "System Name\\s+([^\\n]+)"
+    },
+    "werkorder_nr": {
+      "patroon": "Service Order number\\s+(\\S+(?:\\s*/\\s*\\S+)?)"
+    },
+    "datum": {
+      "patroon": "Date/Time\\s+(\\d{2}\\.\\d{2}\\.\\d{4})"
+    },
+    "type_verzoek": {
+      "patroon": "Type of activity\\s+([^\\n]+?)\\s+Call Open Date"
+    },
+    "uren_arbeid": {
+      "patroon": "Labor\\(in Hrs\\)\\s+([\\d,\\.]+)"
+    },
+    "omschrijving_kort": {
+      "patroon": "Reported issue\\s*\\n(.+?)(?:\\nMaterials & hours used|\\n\\n|\\Z)",
+      "verwerking": ["strip", "join_whitespace"]
+    },
+    "activiteit_tekst": {
+      "patroon": "Delivered services\\s*\\n(.+?)(?:\\nServices are delivered|\\nSiemens Healthcare NV/SA|\\Z)",
+      "verwerking": ["strip", "join_whitespace"]
+    }
+  },
+  "bonus_velden": {
+    "t_nummer": {
+      "patroon": "Customer reference\\s+(T\\d{3,})"
+    }
+  }
+}

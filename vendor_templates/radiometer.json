@@ -1,0 +1,29 @@
+{
+  "naam": "radiometer",
+  "firma": "Radiometer",
+  "detectie": {
+    "bevat_alle": ["SERVICERAPPORT", "Radiometer"]
+  },
+  "velden": {
+    "sn": {
+      "patroon": "Serie nr\\.\\s+(\\S+)"
+    },
+    "product": {
+      "patroon": "Instrument/Type\\s+(.+?)\\s+Rapport nr\\."
+    },
+    "werkorder_nr": {
+      "patroon": "Rapport nr\\.\\s+(\\S+)"
+    },
+    "datum": {
+      "patroon": "Start Werk\\s+(\\d{1,2}/\\d{1,2}/\\d{4})"
+    },
+    "omschrijving_kort": {
+      "patroon": "Omschrijving\\s+(.+?)\\s+Start Werk"
+    },
+    "activiteit_tekst": {
+      "patroon": "Onderzoek Reparatie\\s*\\n(.+?)\\nKalibratie OK\\?",
+      "verwerking": ["strip", "join_whitespace"]
+    }
+  },
+  "_opmerking": "Onderzoek en Reparatie staan in de PDF naast elkaar als twee kolommen; de tekst-extractie interleaved ze op dezelfde regels, waardoor activiteit_tekst hierboven beide kolommen samen bevat (niet perfect gesplitst) - zie open vraag over hoe streng dit soort kolom-lay-outs uit elkaar getrokken moet worden."
+}

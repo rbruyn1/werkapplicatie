@@ -1,0 +1,31 @@
+{
+  "naam": "procare",
+  "firma": "ProCare",
+  "detectie": {
+    "bevat_alle": ["ProCare", "Rapportnummer"]
+  },
+  "velden": {
+    "sn": {
+      "patroon": "Serienummer fabrikant\\s+(\\S+)"
+    },
+    "product": {
+      "patroon": "Apparaat omschrijving\\s+(.+?)\\nSerienummer fabrikant",
+      "verwerking": ["strip", "join_whitespace"]
+    },
+    "werkorder_nr": {
+      "patroon": "Rapportnummer\\s+(\\S+)"
+    },
+    "datum": {
+      "patroon": "Onderhoudsdatum\\s+(\\d{2}-\\d{2}-\\d{4})"
+    },
+    "type_verzoek": {
+      "patroon": "Service type\\s+([^\\n]+)"
+    }
+  },
+  "bonus_velden": {
+    "t_nummer": {
+      "patroon": "Registratienummer klant\\s+(\\S+)"
+    }
+  },
+  "_opmerking": "omschrijving_kort/activiteit_tekst niet in dit prototype opgenomen: vereist het wegknippen van een label ('Samenvatting uitgevoerde werkzaamheden') dat door de kolomlay-out MIDDEN in de waarde terechtkomt - dat is een aparte 'verwerking'-stap (regex-substitutie) die het huidige sjabloonformaat nog niet ondersteunt. Zie open vraag in README.md. De Python-functie _extraheer_procare() in wo_service_rapport.py doet dit wel al correct."
+}

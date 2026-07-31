@@ -1,0 +1,454 @@
+{% set actieve_pagina = 'service-rapporten' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Service Rapporten — UZ Leuven</title>
+<style>
+  :root {
+    --bg:      #f0f2f7;
+    --panel:   #ffffff;
+    --border:  #d0d5e0;
+    --text:    #1a1f2e;
+    --muted:   #6070a0;
+    --accent:  #1a6bdd;
+    --green:   #2a9d5c;
+    --orange:  #e26b0a;
+    --red:     #d63031;
+    --mono:    'Trebuchet MS', sans-serif;
+    --sans:    'Trebuchet MS', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--panel);
+    border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-badge { background: var(--accent); color: #fff; font-family: var(--mono); font-size: 11px; letter-spacing: 2px; padding: 5px 10px; border-radius: 3px; }
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--text); }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .nav-btn { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; border: 1px solid #3a4060; padding: 7px 14px; border-radius: 3px; letter-spacing: .5px; transition: all .15s; }
+  .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .nav-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  /* ── Hoofd layout ── */
+  main { flex: 1; padding: 28px; width: 100%; margin: 0 auto; }
+
+  /* ── Upload zone ── */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: 8px; padding: 40px 24px;
+    text-align: center; background: var(--panel); cursor: pointer; transition: all .2s;
+    margin-bottom: 24px;
+  }
+  .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: #f0f5ff; }
+  .upload-zone input { display: none; }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; }
+  .upload-zone p { color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .upload-zone strong { color: var(--accent); }
+
+  /* ── Tabel ── */
+  .panel { background: var(--panel); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .panel-header h2 { font-family: var(--mono); font-size: 14px; letter-spacing: 1px; color: var(--text); }
+  .tabel-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 1100px; table-layout: auto; }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: 1px; color: var(--muted); padding: 10px 10px; text-align: left; background: #f7f9fc; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 12px 10px; border-bottom: 1px solid #eef0f6; vertical-align: middle; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f7f9ff; }
+
+  /* ── Status badges ── */
+  .badge { display: inline-block; font-family: var(--mono); font-size: 10px; letter-spacing: 1px; padding: 3px 8px; border-radius: 3px; font-weight: 700; white-space: nowrap; }
+  .badge-nieuw    { background: #e8f0ff; color: var(--accent); border: 1px solid #b0c8f0; }
+  .badge-bevestigd { background: #e8fff2; color: var(--green); border: 1px solid #a0e0c0; }
+  .badge-wo_aangemaakt { background: #e8fff2; color: var(--green); border: 1px solid #a0e0c0; }
+  .badge-fout     { background: #fff0f0; color: var(--red); border: 1px solid #f0b0b0; }
+  .badge-bezig    { background: #fff8e0; color: var(--orange); border: 1px solid #f0d070; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  /* ── Knoppen ── */
+  .btn { font-family: var(--mono); font-size: 12px; padding: 6px 14px; border-radius: 3px; border: 1px solid; cursor: pointer; letter-spacing: .5px; transition: all .15s; white-space: nowrap; }
+  .btn:disabled { opacity: .4; pointer-events: none; }
+  .btn-primary  { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #1558c0; }
+  .btn-success  { background: var(--green); color: #fff; border-color: var(--green); }
+  .btn-success:hover { background: #21834a; }
+  .btn-outline  { background: none; color: var(--muted); border-color: var(--border); }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger   { background: none; color: var(--red); border-color: #f0b0b0; }
+  .btn-danger:hover { background: var(--red); color: #fff; }
+  .btn-sm { font-size: 11px; padding: 4px 10px; }
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .radio-toggle { display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 11px; }
+  .radio-toggle label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--muted); white-space: nowrap; }
+  .radio-toggle input[type="radio"] { accent-color: var(--accent); cursor: pointer; margin: 0; }
+  .radio-toggle label:has(input:checked) { color: var(--text); font-weight: 700; }
+
+  /* ── Invoervelden ── */
+  input[type=text], input[type=number] {
+    font-family: var(--mono); font-size: 13px; padding: 5px 10px;
+    border: 1px solid var(--border); border-radius: 3px; background: var(--bg);
+    color: var(--text); transition: border-color .15s; width: 100%; min-width: 80px;
+  }
+  input[type=text]:focus, input[type=number]:focus { outline: none; border-color: var(--accent); }
+
+  /* ── Log modal ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #1a1f2e; border-radius: 8px; width: 700px; max-width: 95vw; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid #3a4060; }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #3a4060; }
+  .modal-header h3 { font-family: var(--mono); font-size: 14px; color: #fff; letter-spacing: 1px; }
+  .modal-close { background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1; }
+  .modal-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .log-line { font-family: var(--mono); font-size: 12px; color: #a0b0d0; line-height: 1.7; white-space: pre-wrap; word-break: break-all; }
+  .log-line.ok  { color: #3dff8f; }
+  .log-line.err { color: #ff6961; }
+  .log-line.info { color: #a0b0d0; }
+
+  /* ── Lege state ── */
+  .empty-state { padding: 60px 24px; text-align: center; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+  .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: .3; }
+
+  /* ── SN chip ── */
+  .sn-chip { font-family: var(--mono); font-size: 12px; background: #1a1f2e; color: #a0c8ff; padding: 2px 8px; border-radius: 3px; display: inline-block; }
+  .t-chip  { font-family: var(--mono); font-size: 12px; background: #1a3020; color: #3dff8f; padding: 2px 8px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="/assets/image.png" alt="UZ Leuven" style="height:36px;width:auto;">
+    <h1>SERVICE RAPPORTEN</h1>
+  </div>
+  <div class="header-right">
+    {% include "_nav.html" %}
+  </div>
+</header>
+
+<main>
+  <!-- Upload zone -->
+  <div class="upload-zone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">📄</div>
+    <p><strong>Klik hier of sleep PDF's hiernaartoe</strong></p>
+    <p style="margin-top:6px">Service rapporten van Vantive, Nipro, B.Braun, Fluke/Ansur, …</p>
+    <p style="margin-top:4px;font-size:11px;color:#9aabcc">Serienummer wordt automatisch uitgelezen · meerdere bestanden tegelijk mogelijk</p>
+    <input type="file" id="fileInput" multiple accept=".pdf">
+  </div>
+
+  <!-- Tabel -->
+  <div class="panel">
+    <div class="panel-header">
+      <h2>📁 GEÜPLOADE RAPPORTEN (<span id="aantalBadge">0</span>)</h2>
+      <div class="btn-group">
+        <button class="btn btn-outline btn-sm" onclick="laadRapporten()">↻ Vernieuwen</button>
+        <button class="btn btn-danger btn-sm" onclick="wisAlles()" id="wisAllesBtn" style="display:none">🗑 Wis alles</button>
+      </div>
+    </div>
+    <div id="tabelContainer">
+      <div class="empty-state">
+        <div class="empty-icon">📂</div>
+        <div>Nog geen rapporten geüpload</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Log Modal -->
+<div class="modal-overlay" id="logModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="logModalTitel">LOG</h3>
+      <button class="modal-close" onclick="sluitLog()">✕</button>
+    </div>
+    <div class="modal-body" id="logModalBody"></div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let rapporten = [];
+let actieveJobs = {}; // rapport_id → job_id
+let woStatusKeuze = {}; // rapport_id → true (UITGEV) | false (INUITV)
+
+// ── Upload ────────────────────────────────────────────────────────────────────
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  uploadBestanden(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => uploadBestanden(fileInput.files));
+
+async function uploadBestanden(files) {
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('bestanden', f);
+
+  dropzone.innerHTML = `<div class="upload-icon">⏳</div><p style="color:var(--accent);font-family:var(--mono)">${files.length} bestand(en) verwerken...</p>`;
+
+  try {
+    const r = await fetch('/api/service-rapporten/upload', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (data.ok) {
+      await laadRapporten();
+    } else {
+      alert('Upload mislukt: ' + (data.fout || 'onbekende fout'));
+    }
+  } catch (e) {
+    alert('Upload fout: ' + e);
+  } finally {
+    dropzone.innerHTML = `
+      <div class="upload-icon">📄</div>
+      <p><strong>Klik hier of sleep PDF's hiernaartoe</strong></p>
+      <p style="margin-top:6px">Service rapporten van Vantive, Nipro, B.Braun, Fluke/Ansur, …</p>
+      <p style="margin-top:4px;font-size:11px;color:#9aabcc">Serienummer wordt automatisch uitgelezen · meerdere bestanden tegelijk mogelijk</p>
+      <input type="file" id="fileInput" multiple accept=".pdf">`;
+    document.getElementById('fileInput').addEventListener('change', () => uploadBestanden(document.getElementById('fileInput').files));
+  }
+}
+
+// ── Laden ─────────────────────────────────────────────────────────────────────
+async function laadRapporten() {
+  const r = await fetch('/api/service-rapporten');
+  rapporten = await r.json();
+  // Rapporten zonder WO eerst (nog actie nodig), daarbinnen laatst toegevoegde bovenaan.
+  rapporten.sort((a, b) => {
+    const aHeeftWO = !!(a.wo_id);
+    const bHeeftWO = !!(b.wo_id);
+    if (aHeeftWO !== bHeeftWO) return aHeeftWO ? 1 : -1;
+    return (b.aangemaakt || '').localeCompare(a.aangemaakt || '');
+  });
+  renderTabel();
+}
+
+function renderTabel() {
+  document.getElementById('aantalBadge').textContent = rapporten.length;
+  document.getElementById('wisAllesBtn').style.display = rapporten.length ? '' : 'none';
+  const container = document.getElementById('tabelContainer');
+
+  if (!rapporten.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📂</div><div>Nog geen rapporten geüpload</div></div>`;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="tabel-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>BESTAND</th>
+          <th>FIRMA</th>
+          <th>PRODUCT / TYPE</th>
+          <th>SERIENUMMER</th>
+          <th>T-NUMMER</th>
+          <th>DATUM</th>
+          <th>UREN</th>
+          <th>PROBLEEMMELDING</th>
+          <th>OPLOSSING</th>
+          <th>STATUS</th>
+          <th>WO</th>
+          <th>WO-STATUS</th>
+          <th>ACTIES</th>
+        </tr>
+      </thead>
+      <tbody id="tabelBody"></tbody>
+    </table>
+    </div>`;
+
+  const tbody = document.getElementById('tabelBody');
+  for (const r of rapporten) {
+    tbody.appendChild(maakRij(r));
+  }
+}
+
+function maakRij(r) {
+  const tr = document.createElement('tr');
+  tr.id = `rij-${r.id}`;
+
+  const statusBadge = `<span class="badge badge-${r.status || 'nieuw'}">${statusLabel(r.status)}</span>`;
+  const snChip = r.sn ? `<span class="sn-chip">${r.sn}</span>` : `<span style="color:var(--muted)">—</span>`;
+  const tChip  = r.t_nummer ? `<span class="t-chip">${r.t_nummer}</span>` : `<span style="color:var(--muted)">—</span>`;
+  const woLink = r.wo_id
+    ? `<a href="https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD/EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL?Page=UZFM_WO_ALG&Action=U&BUSINESS_UNIT=POUZL&UZ_WO_ID=${r.wo_id}" target="_blank" style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)">${r.wo_id}</a>`
+    : `<span style="color:var(--muted)">—</span>`;
+
+  const isBezig = r.status === 'bezig' || actieveJobs[r.id];
+  const heeftSN = !!r.sn;
+  const heeftT  = !!r.t_nummer;
+  const woKlaar = !!r.wo_id;
+
+  // Standaard: UITGEV, behalve als gebruiker al eerder INUITV koos voor dit rapport
+  if (!(r.id in woStatusKeuze)) woStatusKeuze[r.id] = true;
+  const keuzeUitgev = woStatusKeuze[r.id];
+
+  const woStatusToggle = (heeftT && !woKlaar)
+    ? `<div class="radio-toggle">
+        <label><input type="radio" name="wostat-${r.id}" ${keuzeUitgev ? 'checked' : ''} onchange="woStatusKeuze['${r.id}']=true">UITGEV</label>
+        <label><input type="radio" name="wostat-${r.id}" ${!keuzeUitgev ? 'checked' : ''} onchange="woStatusKeuze['${r.id}']=false">INUITV</label>
+      </div>`
+    : `<span style="color:var(--muted)">—</span>`;
+
+  tr.innerHTML = `
+    <td style="font-family:var(--mono);font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.bestandsnaam || '')}">${escHTML(r.bestandsnaam || '—')}</td>
+    <td style="font-weight:600">${escHTML(r.firma || '—')}</td>
+    <td style="font-size:12px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.product || '')} — ${escHTML(r.type_verzoek || '')}">${escHTML(r.product || '—')}</td>
+    <td id="sn-cell-${r.id}">${snChip}</td>
+    <td id="t-cell-${r.id}">${tChip}</td>
+    <td style="font-family:var(--mono);font-size:12px">${escHTML(r.datum || '—')}</td>
+    <td style="font-family:var(--mono);font-size:12px">${escHTML(r.uren_arbeid || '—')}</td>
+    <td style="font-size:12px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.probleemmelding || '')}">${escHTML(r.probleemmelding || '—')}</td>
+    <td style="font-size:12px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)" title="${escHTML(r.oplossing || '')}">${escHTML(r.oplossing || '—')}</td>
+    <td id="status-cell-${r.id}">${statusBadge}</td>
+    <td id="wo-cell-${r.id}">${woLink}</td>
+    <td id="wostatus-cell-${r.id}">${woStatusToggle}</td>
+    <td>
+      <div class="btn-group">
+        ${!heeftSN ? `<button class="btn btn-outline btn-sm" onclick="bewerkSN('${r.id}')">✏ SN</button>` : ''}
+        ${heeftSN && !heeftT && !isBezig ? `<button class="btn btn-primary btn-sm" onclick="zoekTnummer('${r.id}')">🔍 T-nr</button>` : ''}
+        ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-success btn-sm" onclick="maakWO('${r.id}')">⚡ WO</button>` : ''}
+        ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" onclick="bewerkTnummer('${r.id}')">✏ T-nr</button>` : ''}
+        ${isBezig ? `<span class="badge badge-bezig">BEZIG…</span>` : ''}
+        <button class="btn btn-danger btn-sm" onclick="verwijder('${r.id}')">✕</button>
+      </div>
+    </td>`;
+  return tr;
+}
+
+function statusLabel(s) {
+  return { nieuw: 'NIEUW', bevestigd: 'T-NR OK', wo_aangemaakt: 'WO KLAAR', fout: 'FOUT', bezig: 'BEZIG' }[s] || (s || 'NIEUW').toUpperCase();
+}
+
+function escHTML(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Bewerken SN / T-nummer ────────────────────────────────────────────────────
+function bewerkSN(id) {
+  const r = rapporten.find(x => x.id === id);
+  const sn = prompt('Serienummer invoeren:', r?.sn || '');
+  if (sn === null) return;
+  patchRapport(id, { sn: sn.trim() });
+}
+
+function bewerkTnummer(id) {
+  const r = rapporten.find(x => x.id === id);
+  const tn = prompt('T-nummer invoeren (bv. T12345):', r?.t_nummer || '');
+  if (tn === null) return;
+  patchRapport(id, { t_nummer: tn.trim(), status: tn.trim() ? 'bevestigd' : 'nieuw' });
+}
+
+async function patchRapport(id, velden) {
+  await fetch(`/api/service-rapporten/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(velden)
+  });
+  await laadRapporten();
+}
+
+// ── T-nummer opzoeken ─────────────────────────────────────────────────────────
+async function zoekTnummer(id) {
+  const r = await fetch(`/api/service-rapporten/${id}/zoek-tnummer`, { method: 'POST' });
+  const data = await r.json();
+  if (!data.ok) { alert('Fout: ' + (data.fout || 'onbekend')); return; }
+  actieveJobs[id] = data.job_id;
+  await laadRapporten();
+  volg_job(id, data.job_id, 'T-NUMMER OPZOEKEN');
+}
+
+// ── WO aanmaken ───────────────────────────────────────────────────────────────
+async function maakWO(id) {
+  const r = rapporten.find(x => x.id === id);
+  if (!confirm(`WO aanmaken voor ${r?.firma || ''} — SN ${r?.sn || ''} — T-nr ${r?.t_nummer || ''}?`)) return;
+
+  const zetUitgev = woStatusKeuze[id] ?? true;
+
+  const resp = await fetch(`/api/service-rapporten/${id}/wo-aanmaken`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ zet_uitgev: zetUitgev })
+  });
+  const data = await resp.json();
+  if (!data.ok) { alert('Fout: ' + (data.fout || 'onbekend')); return; }
+  actieveJobs[id] = data.job_id;
+  await laadRapporten();
+  volg_job(id, data.job_id, 'WERKORDER AANMAKEN');
+}
+
+// ── Job polling ───────────────────────────────────────────────────────────────
+function volg_job(rapport_id, job_id, titel) {
+  toonLog(titel, []);
+  const interval = setInterval(async () => {
+    const r = await fetch(`/api/service-rapporten/job/${job_id}`);
+    const job = await r.json();
+
+    // Update log
+    const body = document.getElementById('logModalBody');
+    if (body && document.getElementById('logModal').classList.contains('open')) {
+      body.innerHTML = (job.log || []).map(l => {
+        const cls = l.includes('✓') ? 'ok' : l.includes('❌') ? 'err' : 'info';
+        return `<div class="log-line ${cls}">${escHTML(l)}</div>`;
+      }).join('');
+      body.scrollTop = body.scrollHeight;
+    }
+
+    if (job.status !== 'bezig') {
+      clearInterval(interval);
+      delete actieveJobs[rapport_id];
+      await laadRapporten();
+      // Bij succes: log even laten zien, dan automatisch sluiten.
+      // Bij een fout: popup blijft open staan zodat de fout leesbaar blijft.
+      if (job.status === 'klaar') {
+        setTimeout(() => {
+          if (document.getElementById('logModalTitel').textContent === titel) sluitLog();
+        }, 1200);
+      }
+    }
+  }, 1500);
+}
+
+// ── Log modal ─────────────────────────────────────────────────────────────────
+function toonLog(titel, lijnen) {
+  document.getElementById('logModalTitel').textContent = titel;
+  document.getElementById('logModalBody').innerHTML = lijnen.map(l =>
+    `<div class="log-line">${escHTML(l)}</div>`).join('');
+  document.getElementById('logModal').classList.add('open');
+}
+
+function sluitLog() {
+  document.getElementById('logModal').classList.remove('open');
+}
+document.getElementById('logModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) sluitLog();
+});
+
+// ── Verwijderen ───────────────────────────────────────────────────────────────
+async function verwijder(id) {
+  if (!confirm('Rapport verwijderen?')) return;
+  await fetch(`/api/service-rapporten/${id}`, { method: 'DELETE' });
+  await laadRapporten();
+}
+
+async function wisAlles() {
+  if (!confirm(`Alle ${rapporten.length} rapporten verwijderen?`)) return;
+  for (const r of [...rapporten]) {
+    await fetch(`/api/service-rapporten/${r.id}`, { method: 'DELETE' });
+  }
+  await laadRapporten();
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+laadRapporten();
+</script>
+</body>
+</html>

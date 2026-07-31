@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>RO Staalname — Ticketten</title>
+<style>
+  /* ── Reset ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Arial Narrow', Arial, sans-serif;
+    background: #f0f0f0;
+  }
+
+  /* ── Schermweergave: preview ── */
+  #preview-bar {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 13px;
+    font-family: Arial, sans-serif;
+  }
+  #preview-bar strong { color: #fff; }
+  #preview-bar button {
+    background: #4a90d9;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 6px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  #preview-bar button:hover { background: #357abd; }
+
+  #paginas {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+    padding: 24px;
+  }
+
+  /* ── A5 pagina (staand) met exacte etiketposities ── */
+  .pagina {
+    background: #fff;
+    width: 148mm;
+    height: 210mm;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0,0,0,.15);
+    page-break-after: always;
+    overflow: hidden;
+  }
+
+  /* ── Etiket — absoluut gepositioneerd per sticker-afmetingen ──
+     Rijen:    top 15mm, hoogte 28mm, tussenruimte 8mm  (36mm pitch)
+     Kolommen: 22mm | 52mm | 52mm | 22mm (geen tussenruimte tussen kolommen)
+  ── */
+  .etiket {
+    position: absolute;
+    width: 52mm;
+    height: 28mm;
+    border: 0.5pt solid #bbb;
+    padding: 4pt 6pt;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  /* Kolom posities: 22mm | 52mm | 52mm | 22mm (geen tussenruimte) */
+  .etiket:nth-child(odd)  { left: 22mm; }
+  .etiket:nth-child(even) { left: 74mm; }
+
+  /* Rij posities (0-indexed paar → rij nr) */
+  /* rij 1: 15mm, rij 2: 51mm, rij 3: 87mm, rij 4: 123mm, rij 5: 159mm */
+  .etiket:nth-child(1),  .etiket:nth-child(2)  { top: 15mm; }
+  .etiket:nth-child(3),  .etiket:nth-child(4)  { top: 51mm; }
+  .etiket:nth-child(5),  .etiket:nth-child(6)  { top: 87mm; }
+  .etiket:nth-child(7),  .etiket:nth-child(8)  { top: 123mm; }
+  .etiket:nth-child(9),  .etiket:nth-child(10) { top: 159mm; }
+
+  .etiket-leeg {
+    border: 0.5pt solid #eee;
+  }
+
+  .regel { display: flex; align-items: baseline; gap: 4pt; }
+
+  /* Regel 1: Eenheidsnummer | Datum | ROUnit */
+  .r1 {
+    border-bottom: 0.5pt solid #333;
+    padding-bottom: 2pt;
+    margin-bottom: 2pt;
+    font-size: 10pt;
+    font-weight: bold;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 4pt;
+    align-items: baseline;
+  }
+  .r1-eenheid { font-weight: bold; }
+  .r1-datum   { font-weight: bold; text-align: center; }
+  .r1-rounit  { font-weight: bold; color: #cc0000; text-align: right; }
+
+  /* Regel 2: Type vloeistof label | T-nummer rechts */
+  .r2 {
+    font-size: 8pt;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+    padding-bottom: 1pt;
+  }
+  .r2-label  { font-weight: bold; }
+  .r2-tnr    { font-size: 7pt; color: #444; }
+
+  /* Regel 3: Afnamepunt (met onderlijning) */
+  .r3 {
+    border-bottom: 0.5pt solid #333;
+    padding-bottom: 2pt;
+    margin-bottom: 2pt;
+    font-size: 8pt;
+    font-style: italic;
+    color: #222;
+  }
+
+  /* Regel 4: Type bepaling */
+  .r4 { font-size: 8pt; font-weight: bold; padding-bottom: 1pt; }
+
+  /* Regel 5: Microbiologisch | waarde */
+  .r5 {
+    font-size: 8pt;
+    padding-bottom: 1pt;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+  }
+  .r5-waarde { font-size: 8pt; }
+
+  /* Regel 6: Endotoxine | waarde (met onderlijning) */
+  .r6 {
+    border-bottom: 0.5pt solid #333;
+    padding-bottom: 2pt;
+    margin-bottom: 3pt;
+    font-size: 8pt;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: baseline;
+  }
+  .r6-waarde { font-size: 8pt; }
+
+  /* Regel 7: Prof. Schuermans */
+  .r7 { font-size: 8pt; margin-top: auto; }
+
+  /* ── Lege etiketplaats ── */
+  .etiket-leeg {
+    border: 0.5pt solid #eee;
+  }
+
+  /* ── Print ── */
+  @media print {
+    body { background: #fff; }
+    #preview-bar { display: none; }
+    #paginas { padding: 0; gap: 0; }
+    .pagina {
+      box-shadow: none;
+      page-break-after: always;
+      width: 148mm;
+      height: 210mm;
+    }
+  }
+
+  @page {
+    size: A5 portrait;
+    margin: 0;
+  }
+</style>
+</head>
+<body>
+
+<div id="preview-bar">
+  <strong>🖨 RO Staalname — Ticketten</strong>
+  <span id="info-tekst"></span>
+  <button onclick="window.print()">Afdrukken</button>
+</div>
+
+<div id="paginas"></div>
+
+<script>
+const ENDOTOXINE = "< 0.25 EU/ml";
+const CFU = "< 100 CFU/ml";
+const VLOEISTOFFEN = [
+  "Gezuiverd water : begin ringleiding",
+  "Gezuiverd water : einde ringleiding"
+];
+
+function vandaag() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const jjjj = d.getFullYear();
+  return `${dd}-${mm}-${jjjj}`;
+}
+
+function maakEtiket(inst, vloeistof) {
+  const div = document.createElement("div");
+  div.className = "etiket";
+  div.innerHTML = `
+    <div class="r1">
+      <span class="r1-eenheid">${inst.locatie || ''}</span>
+      <span class="r1-datum">${vandaag()}</span>
+      <span class="r1-rounit">${inst.naam || ''}</span>
+    </div>
+    <div class="r2">
+      <span class="r2-label">Type vloeistof</span>
+      <span class="r2-tnr">${inst.maximo || ''}</span>
+    </div>
+    <div class="r3">${vloeistof}</div>
+    <div class="r4">Type bepaling</div>
+    <div class="r5">
+      <span>Microbiologisch</span>
+      <span class="r5-waarde">${CFU}</span>
+    </div>
+    <div class="r6">
+      <span>Endotoxine</span>
+      <span class="r6-waarde">${ENDOTOXINE}</span>
+    </div>
+    <div class="r7">Prof. Schuermans</div>
+  `;
+  return div;
+}
+
+function bouwPaginas(installaties) {
+  // Bouw lijst van alle etiketten: per installatie 2 (begin + einde)
+  const etiketten = [];
+  for (const inst of installaties) {
+    for (const vloeistof of VLOEISTOFFEN) {
+      etiketten.push({ inst, vloeistof });
+    }
+  }
+
+  const container = document.getElementById("paginas");
+  container.innerHTML = "";
+  document.getElementById("info-tekst").textContent =
+    `${installaties.length} installatie(s) — ${etiketten.length} ticketten`;
+
+  // 10 etiketten per pagina (2 kolommen × 5 rijen)
+  const PER_PAGINA = 10;
+  let pagina = null;
+  let teller = 0;
+
+  for (let i = 0; i < etiketten.length; i++) {
+    if (teller % PER_PAGINA === 0) {
+      pagina = document.createElement("div");
+      pagina.className = "pagina";
+      container.appendChild(pagina);
+      teller = 0;
+    }
+    pagina.appendChild(maakEtiket(etiketten[i].inst, etiketten[i].vloeistof));
+    teller++;
+  }
+
+  // Vul laatste pagina op met lege plaatsen
+  if (pagina && teller % PER_PAGINA !== 0) {
+    const resterend = PER_PAGINA - (teller % PER_PAGINA);
+    for (let j = 0; j < resterend; j++) {
+      const leeg = document.createElement("div");
+      leeg.className = "etiket etiket-leeg";
+      pagina.appendChild(leeg);
+    }
+  }
+}
+
+// Laad data uit sessionStorage (gezet door ro_staalname.html)
+const raw = sessionStorage.getItem("ro_print_installaties");
+if (raw) {
+  try {
+    const installaties = JSON.parse(raw);
+    bouwPaginas(installaties);
+    // Automatisch afdrukken zodra pagina volledig geladen is
+    window.addEventListener("load", () => {
+      window.print();
+      // Sluit venster na printen (terug naar RO staalname)
+      window.addEventListener("afterprint", () => window.close());
+    });
+  } catch(e) {
+    document.getElementById("paginas").textContent = "Fout bij laden van data: " + e;
+  }
+} else {
+  document.getElementById("paginas").innerHTML =
+    "<p style='padding:40px;color:#666;font-family:Arial'>Geen data gevonden. Sluit dit venster en gebruik de knop 'Print Ticketten' op de RO staalname pagina.</p>";
+}
+</script>
+</body>
+</html>

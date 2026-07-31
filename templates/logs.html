@@ -1,0 +1,393 @@
+{% set actieve_pagina = 'logs' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logbestanden — Werkorder Dashboard</title>
+<style>
+  :root {
+    --bg:      #f0f2f7;
+    --panel:   #ffffff;
+    --border:  #d0d5e0;
+    --text:    #1a1f2e;
+    --muted:   #6070a0;
+    --accent:  #1a6bdd;
+    --mono:    'Trebuchet MS', sans-serif;
+    --sans:    'Trebuchet MS', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--text); }
+  .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .nav-link {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--border);
+    padding: 7px 14px; border-radius: 3px; letter-spacing: .5px; transition: all .15s;
+  }
+  .nav-link:hover, .nav-link.active { border-color: var(--accent); color: var(--accent); }
+  .nav-link.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* ── Layout ── */
+  .main { display: flex; flex: 1; min-height: 0; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 220px; flex-shrink: 0; background: var(--panel);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .sidebar-title {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+    color: var(--muted); padding: 14px 16px 8px; text-transform: uppercase;
+  }
+  .log-item {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent;
+    transition: background .12s, border-color .12s;
+  }
+  .log-item:hover { background: var(--bg); }
+  .log-item.active { background: #e8f0ff; border-left-color: var(--accent); }
+  .log-item-naam { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--text); }
+  .log-item-info { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .log-item-status { font-family: var(--mono); font-size: 10px; }
+  .status-ok   { color: #3dbb6b; }
+  .status-fout { color: #ff6961; }
+  .status-leeg { color: var(--muted); }
+
+  /* ── Content ── */
+  .content { flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+
+  .content-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 12px;
+  }
+  .content-title { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text); }
+  .content-meta  { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .content-actions { display: flex; gap: 8px; align-items: center; }
+
+  .btn {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .5px;
+    padding: 6px 14px; border-radius: 3px; cursor: pointer; border: 1px solid;
+    transition: background .15s, color .15s;
+  }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { background: #1558bb; }
+  .btn-ghost { background: none; color: var(--muted); border-color: var(--border); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: none; color: #ff6961; border-color: #ff6961; }
+  .btn-danger:hover { background: #ff6961; color: #fff; }
+
+  /* n-selector */
+  .n-select {
+    font-family: var(--mono); font-size: 11px; padding: 5px 8px;
+    border: 1px solid var(--border); border-radius: 3px; background: var(--bg);
+    color: var(--text); cursor: pointer;
+  }
+
+  /* ── Log viewer ── */
+  .log-viewer {
+    flex: 1; overflow-y: auto; padding: 12px 20px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+    background: #1a1f2e; color: #c8d0e8;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .log-viewer .line-ts    { color: #6070a0; }
+  .line-ok    { color: #3dbb6b; }
+  .line-fout  { color: #ff6961; }
+  .line-warn  { color: #f0b429; }
+  .line-stap  { color: #7ec8e3; }
+  .line-sep   { color: #3a4060; font-weight: 700; }
+  .line-login { color: #a78bfa; }
+
+  /* empty / loading state */
+  .log-empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; color: var(--muted);
+    font-family: var(--mono); font-size: 13px;
+  }
+  .log-empty-icon { font-size: 32px; }
+
+  /* auto-refresh indicator */
+  .refresh-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #3dbb6b;
+    display: inline-block; animation: pulse 2s infinite;
+  }
+  .refresh-dot.off { background: var(--muted); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* scroll-to-bottom fab */
+  #scroll-btn {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--accent); color: #fff; border: none;
+    width: 38px; height: 38px; border-radius: 50%; font-size: 18px;
+    cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    display: none; align-items: center; justify-content: center;
+    transition: background .15s;
+  }
+  #scroll-btn:hover { background: #1558bb; }
+  #scroll-btn.visible { display: flex; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="/assets/image.png" alt="UZ Leuven" style="height:36px;width:auto;">
+    <h1>Logbestanden</h1>
+  </div>
+  <div class="header-right">
+    {% include "_nav.html" %}
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Sidebar: log file list -->
+  <div class="sidebar">
+    <div class="sidebar-title">Logbestanden</div>
+    <div id="log-lijst"></div>
+    <div class="sidebar-title" style="margin-top:14px">Overzichten</div>
+    <div class="log-item" id="ess-overzicht-item" onclick="toonEssOverzicht()">
+      <div class="log-item-naam">📦 Bijbestelde vaten (ESS)</div>
+      <div class="log-item-info">Automatisch bij container-enabled</div>
+    </div>
+  </div>
+
+  <!-- Content: log viewer -->
+  <div class="content">
+    <div class="content-header">
+      <div>
+        <div class="content-title" id="content-title">Selecteer een logbestand</div>
+        <div class="content-meta" id="content-meta"></div>
+      </div>
+      <div class="content-actions">
+        <label style="font-family:var(--mono);font-size:11px;color:var(--muted);">Laatste</label>
+        <select class="n-select" id="n-select" onchange="herlaad()">
+          <option value="50">50 regels</option>
+          <option value="100" selected>100 regels</option>
+          <option value="250">250 regels</option>
+          <option value="500">500 regels</option>
+          <option value="0">Alles</option>
+        </select>
+        <span class="refresh-dot" id="refresh-dot" title="Auto-refresh aan"></span>
+        <button class="btn btn-ghost" onclick="toggleAutoRefresh()" id="refresh-toggle-btn">⏸ PAUZEER</button>
+        <button class="btn btn-primary" onclick="herlaad()">↻ VERNIEUWEN</button>
+      </div>
+    </div>
+    <div id="log-content" class="log-viewer" style="display:none"></div>
+    <div id="log-empty" class="log-empty">
+      <div class="log-empty-icon">📄</div>
+      <div>Selecteer een logbestand in de lijst</div>
+    </div>
+  </div>
+
+</div>
+
+<button id="scroll-btn" onclick="scrollNaar('bottom')" title="Scroll naar beneden">↓</button>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let huidigLog    = null;
+let autoRefresh  = true;
+let refreshTimer = null;
+let logLijst     = [];
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+laadLogLijst();
+setInterval(laadLogLijst, 30_000);   // sidebar elke 30s bijwerken
+
+// ── Log lijst laden ──────────────────────────────────────────────────────────
+async function laadLogLijst() {
+  try {
+    const r = await fetch('/api/logs/lijst');
+    const d = await r.json();
+    logLijst = d.logs || [];
+    renderSidebar();
+  } catch(e) {
+    console.error('Fout bij laden loglijst:', e);
+  }
+}
+
+function renderSidebar() {
+  const el = document.getElementById('log-lijst');
+  if (!logLijst.length) {
+    el.innerHTML = '<div style="padding:16px;font-family:var(--mono);font-size:11px;color:var(--muted)">Geen logbestanden gevonden</div>';
+    return;
+  }
+  el.innerHTML = logLijst.map(log => `
+    <div class="log-item ${huidigLog === log.id ? 'active' : ''}" onclick="selecteerLog('${log.id}')">
+      <div class="log-item-naam">${log.naam}</div>
+      <div class="log-item-info">${log.grootte_kb} KB · ${log.regels} regels</div>
+      <div class="log-item-status ${statusKlasse(log)}">${statusTekst(log)}</div>
+    </div>
+  `).join('');
+}
+
+function statusKlasse(log) {
+  if (!log.bestaat) return 'status-leeg';
+  if (log.laatste_regel && (log.laatste_regel.includes('❌') || log.laatste_regel.toLowerCase().includes('fout'))) return 'status-fout';
+  if (log.laatste_regel && log.laatste_regel.includes('✓')) return 'status-ok';
+  return 'status-leeg';
+}
+function statusTekst(log) {
+  if (!log.bestaat) return '— nog geen data';
+  if (!log.laatste_ts) return log.laatste_regel ? log.laatste_regel.slice(0, 40) : '—';
+  return log.laatste_ts;
+}
+
+// ── Log selecteren ────────────────────────────────────────────────────────────
+function selecteerLog(id) {
+  huidigLog = id;
+  document.getElementById('ess-overzicht-item').classList.remove('active');
+  renderSidebar();
+  const lc = document.getElementById('log-content');
+  lc.style.whiteSpace = '';
+  lc.style.padding = '';
+  document.getElementById('log-empty').style.display   = 'none';
+  lc.style.display = 'block';
+  document.getElementById('content-title').textContent = logLijst.find(l => l.id === id)?.naam || id;
+  herlaad();
+  if (autoRefresh) startAutoRefresh();
+}
+
+// ── ESS bijbestelde-vaten overzicht ────────────────────────────────────────────
+async function toonEssOverzicht() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  huidigLog = null;
+  renderSidebar();
+  document.getElementById('ess-overzicht-item').classList.add('active');
+  document.getElementById('log-empty').style.display   = 'none';
+  document.getElementById('log-content').style.display = 'block';
+  document.getElementById('content-title').textContent = '📦 Bijbestelde vaten (ESS) — overzicht';
+  document.getElementById('content-meta').textContent  = '';
+
+  try {
+    const r = await fetch('/api/ess-bestellingen');
+    const d = await r.json();
+    const el = document.getElementById('log-content');
+    el.style.whiteSpace = 'normal';
+    el.style.padding = '0';
+    if (!d.length) {
+      el.innerHTML =
+        '<div style="padding:20px;font-family:var(--mono);font-size:12px;color:var(--muted)">Nog geen automatische ESS-bestellingen geregistreerd.</div>';
+      return;
+    }
+    const rijen = d.map(b => {
+      const essStatus = b.ess_overgeslagen
+        ? `⏭ <span style="color:#e2b30a">Overgeslagen — op vraag van gebruiker</span>`
+        : (b.ess_ok
+            ? `✅ <span style="color:#3daf6f">ESS ${b.ess_aanvraag_id}</span>`
+            : `❌ <span style="color:#ff6961">MISLUKT — manueel bestellen!${b.ess_fout ? ' (' + b.ess_fout + ')' : ''}</span>`);
+      const woStatus = b.wo_ok
+        ? `✅ WO ${b.wo_id || ''}`
+        : `❌ WO mislukt`;
+      return `<div style="padding:14px 20px;border-bottom:1px solid #2a3050;font-family:var(--mono);font-size:12px;line-height:1.8;color:#c8d0e8">
+        <div style="color:#7ec8e3"><strong>${b.tijdstip}</strong> &mdash; Container <strong>${b.container}</strong> &rarr; vat type <strong>${b.vat_type || '?'}</strong> (bestelnr ${b.bestelnummer || '?'})</div>
+        <div>ESS-aanvraag: ${essStatus}</div>
+        <div>Werkorder: ${woStatus}</div>
+      </div>`;
+    }).join('');
+    el.innerHTML = rijen;
+  } catch(e) {
+    toonFout(String(e));
+  }
+}
+
+// ── Inhoud laden ──────────────────────────────────────────────────────────────
+async function herlaad() {
+  if (!huidigLog) return;
+  const n = document.getElementById('n-select').value;
+  try {
+    const r = await fetch(`/api/logs/lees/${huidigLog}?n=${n}`);
+    const d = await r.json();
+    if (!d.ok) {
+      toonFout(d.fout);
+      return;
+    }
+    renderLog(d.regels, d.totaal);
+    const log = logLijst.find(l => l.id === huidigLog);
+    document.getElementById('content-meta').textContent =
+      `${d.totaal} regels totaal · getoond: ${d.regels.length} · ${d.pad}`;
+  } catch(e) {
+    toonFout(String(e));
+  }
+}
+
+function renderLog(regels, totaal) {
+  const el = document.getElementById('log-content');
+  const wasOnderaan = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+
+  el.innerHTML = regels.map(r => kleurRegel(r)).join('\n');
+
+  // scroll naar beneden als we al onderaan zaten
+  if (wasOnderaan) el.scrollTop = el.scrollHeight;
+  updateScrollBtn();
+}
+
+function kleurRegel(r) {
+  const esc = r.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  if (r.startsWith('====='))                          return `<span class="line-sep">${esc}</span>`;
+  if (r.includes('❌') || r.toLowerCase().includes('fout') || r.toLowerCase().includes('error') || r.toLowerCase().includes('traceback') || r.includes('FOUT'))
+                                                       return `<span class="line-fout">${esc}</span>`;
+  if (r.includes('⚠') || r.toLowerCase().includes('warning') || r.toLowerCase().includes('waarschuw'))
+                                                       return `<span class="line-warn">${esc}</span>`;
+  if (r.includes('✓') || r.includes('✅') || r.toLowerCase().includes('geslaagd') || r.toLowerCase().includes('klaar'))
+                                                       return `<span class="line-ok">${esc}</span>`;
+  if (r.includes('LOGIN'))                             return `<span class="line-login">${esc}</span>`;
+  if (r.includes('Stap ') || r.includes('STAP '))     return `<span class="line-stap">${esc}</span>`;
+  // timestamp prefix grijs maken (ccs/ess formaat + app.log formaat)
+  return esc.replace(
+    /^(\[\d{2}:\d{2}:\d{2}\]|\[\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}\]|\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d+ \[(?:INFO|WARNING|ERROR|DEBUG)\])/,
+    '<span class="line-ts">$1</span>'
+  );
+}
+
+function toonFout(msg) {
+  const el = document.getElementById('log-content');
+  el.innerHTML = `<span class="line-fout">❌ ${msg}</span>`;
+}
+
+// ── Auto-refresh ──────────────────────────────────────────────────────────────
+function startAutoRefresh() {
+  clearInterval(refreshTimer);
+  const interval = huidigLog === 'app_log' ? 500 : 5000;
+  refreshTimer = setInterval(herlaad, interval);
+}
+
+function toggleAutoRefresh() {
+  autoRefresh = !autoRefresh;
+  const dot = document.getElementById('refresh-dot');
+  const btn = document.getElementById('refresh-toggle-btn');
+  dot.classList.toggle('off', !autoRefresh);
+  btn.textContent = autoRefresh ? '⏸ PAUZEER' : '▶ HERVATTEN';
+  if (autoRefresh && huidigLog) startAutoRefresh();
+  else clearInterval(refreshTimer);
+}
+
+// ── Scroll ────────────────────────────────────────────────────────────────────
+function scrollNaar(richting) {
+  const el = document.getElementById('log-content');
+  el.scrollTop = richting === 'bottom' ? el.scrollHeight : 0;
+}
+
+function updateScrollBtn() {
+  const el  = document.getElementById('log-content');
+  const btn = document.getElementById('scroll-btn');
+  const onderaan = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  btn.classList.toggle('visible', !onderaan && el.scrollHeight > el.clientHeight);
+}
+
+document.getElementById('log-content').addEventListener('scroll', updateScrollBtn);
+</script>
+</body>
+</html>

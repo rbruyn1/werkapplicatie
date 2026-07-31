@@ -1,0 +1,640 @@
+{% set actieve_pagina = 'ro-staalname' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RO Staalnames</title>
+<style>
+:root {
+  --bg: #f0f2f7; --panel: #ffffff; --border: #d0d5e0; --text: #1a1f2e;
+  --muted: #6070a0; --accent: #1a6bdd; --green: #1a9e4a; --red: #cc2200;
+  --mono: 'Trebuchet MS', sans-serif; --sans: 'Trebuchet MS', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+header { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px;
+  background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+.logo-badge { background: var(--accent); color: #fff; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 2px; padding: 5px 10px; border-radius: 3px; }
+h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; }
+.main { padding: 24px 28px; max-width: 1300px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  overflow: hidden; margin-bottom: 20px; }
+.card-header { padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  background: #e8ecf4; flex-wrap: wrap; gap: 8px; }
+.card-title { font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 1px; color: var(--text); }
+.card-body { padding: 16px 18px; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead tr { background: #e2e6f0; }
+th { padding: 10px 14px; text-align: left; font-family: var(--mono); font-size: 12px;
+  letter-spacing: 1px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+tbody tr { border-bottom: 1px solid #e0e4ef; transition: background .1s; }
+tbody tr:hover { background: #f5f7fc; }
+td { padding: 11px 14px; vertical-align: middle; }
+input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
+.badge { font-family: var(--mono); font-size: 11px; padding: 3px 8px; border-radius: 3px;
+  display: inline-block; font-weight: 700; white-space: nowrap; }
+.badge-ok { background: #d4f8d4; color: #1a6b1a; }
+.badge-danger { background: #ffe0dd; color: #aa2200; }
+.btn { font-family: var(--mono); font-size: 13px; padding: 9px 18px; border-radius: 4px;
+  cursor: pointer; border: none; transition: opacity .15s; font-weight: 700; letter-spacing: .5px; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { opacity: .85; }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+.btn-danger { background: var(--red); color: #fff; }
+.btn-danger:hover { opacity: .85; }
+.btn-success { background: var(--green); color: #fff; }
+.btn-success:hover { opacity: .85; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-outline { background: none; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+.log-window { background: #1a1f2e; border: 1px solid var(--border); border-radius: 3px;
+  padding: 12px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 12px;
+  color: #8899bb; line-height: 1.6; margin-top: 12px; }
+.log-ok { color: #1a9e4a; }
+.log-error { color: #cc2200; }
+.log-step { color: #1a6bdd; font-weight: 700; }
+.progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s; }
+.spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.action-status { font-family: var(--mono); font-size: 13px; color: var(--accent);
+  font-weight: 700; margin-bottom: 12px; min-height: 24px; }
+#resultaten { margin-top: 16px; display: none; }
+.empty { text-align: center; padding: 40px; color: var(--muted); font-family: var(--mono); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<header>
+<div class="header-left">
+<img src="/assets/image.png" alt="UZ Leuven" style="height:36px;width:auto;">
+<h1>RO Staalnames</h1>
+</div>
+<div class="header-right" style="display: flex; align-items: center; gap: 12px;">
+  {% include "_nav.html" %}
+</div>
+</header>
+
+<div class="main">
+
+<div class="card">
+<div class="card-header">
+<span class="card-title">RO / HR Installaties</span>
+</div>
+<div class="card-body">
+<div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+<button class="btn btn-primary btn-sm" onclick="openNieuweInstallatie()">+ Toevoegen</button>
+<button class="btn btn-outline btn-sm" onclick="laadData()">↺ Verversen</button>
+<button class="btn btn-primary btn-sm" onclick="opzoekenWO()">🔍 WO OPZOEKEN</button>
+<button class="btn btn-outline btn-sm" onclick="printTicketten()">🖨 PRINT TICKETTEN</button>
+</div>
+<table id="tbl-installaties">
+<thead>
+<tr>
+<th style="width: 30px;"><input type="checkbox" id="chk-all" onchange="toggleAlles(this)"></th>
+<th>Installatie</th>
+<th>Locatie</th>
+<th>Laatste staalname</th>
+<th>Status</th>
+<th>WO</th>
+<th style="width: 60px;"></th>
+</tr>
+</thead>
+<tbody id="tbody-inst">
+<tr><td colspan="7" style="text-align: center; padding: 16px; color: var(--muted);">Laden...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<div class="card">
+<div class="card-header">
+<span class="card-title">WO Opzoeking</span>
+</div>
+<div class="card-body">
+<div class="action-status" id="actie-status"></div>
+<div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+<button class="btn btn-success" id="btn-start" onclick="startWoAanmaken()">🔍 WO's opzoeken</button>
+<button class="btn btn-outline btn-sm" onclick="clearLog()">Log wissen</button>
+</div>
+<div class="progress-bar" id="progress-bar" style="display: none;">
+<div class="progress-fill" id="progress-fill" style="width: 0%;"></div>
+</div>
+<div class="log-window" id="log-window">
+<span style="color: var(--muted);">Selecteer installaties en klik op opzoeken...</span>
+</div>
+<div id="resultaten">
+<table>
+<thead>
+<tr><th>Installatie</th><th>WO</th><th>Status</th><th>Resultaat</th></tr>
+</thead>
+<tbody id="tbody-resultaten"></tbody>
+</table>
+</div>
+</div>
+</div>
+
+<div class="card">
+<div class="card-header">
+<span class="card-title">Geschiedenis</span>
+<button class="btn btn-danger btn-sm" onclick="wisGeschiedenis()">🗑 Wis</button>
+</div>
+<div style="padding: 0;">
+<table>
+<thead>
+<tr>
+<th>Datum</th><th>Installatie</th><th>Locatie</th>
+<th>WO</th><th>Status</th><th>Resultaat</th>
+</tr>
+</thead>
+<tbody id="tbody-gesch">
+<tr><td colspan="6" style="text-align: center; padding: 16px; color: var(--muted);">Laden...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+</div>
+
+<div id="overlay-wo-keuze" style="position: fixed; inset: 0; background: rgba(10,15,30,.6); display: none; align-items: center; justify-content: center; z-index: 2000;">
+<div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 24px 28px; min-width: 420px; max-width: 620px; width: 92%; box-shadow: 0 8px 32px rgba(0,0,0,.2);">
+<h3 style="font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px;">Meerdere WO's gevonden</h3>
+<p id="keuze-installatie-label" style="font-size: 13px; color: var(--muted); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border);"></p>
+<div id="keuze-opties" style="display: grid; gap: 8px; margin-bottom: 20px;"></div>
+<button class="btn btn-outline btn-sm" onclick="sluitKeuzePopup()">Annuleer (overslaan)</button>
+</div>
+</div>
+
+<div id="overlay-geen-wo" style="position: fixed; inset: 0; background: rgba(10,15,30,.6); display: none; align-items: center; justify-content: center; z-index: 2000;">
+<div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 24px 28px; min-width: 380px; max-width: 520px; width: 92%; box-shadow: 0 8px 32px rgba(0,0,0,.2);">
+<h3 style="font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px;">Geen werkorder gevonden</h3>
+<p id="geen-wo-label" style="font-size: 13px; color: var(--muted); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border);"></p>
+<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+  <button class="btn btn-primary btn-sm" onclick="maakNieuweWO()">✚ Nieuwe WO aanmaken</button>
+  <button class="btn btn-outline btn-sm" onclick="sluitGeenWoPopup()">Overslaan</button>
+</div>
+</div>
+</div>
+
+<div id="overlay-nieuw" style="position: fixed; inset: 0; background: rgba(10,15,30,.6); display: none; align-items: center; justify-content: center; z-index: 2000;">
+<div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 24px 28px; min-width: 340px; max-width: 520px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.15);">
+<h3 id="overlay-nieuw-titel" style="font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--text); margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border);">Nieuwe Installatie</h3>
+<form onsubmit="event.preventDefault(); slaInstallatiOp();" style="display: grid; gap: 16px;">
+<div>
+<label style="font-family: var(--mono); font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px;">Naam</label>
+<input type="text" id="new-naam" style="width: 100%; border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font-size: 13px;" required>
+</div>
+<div>
+<label style="font-family: var(--mono); font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px;">Maximo T-nummer</label>
+<input type="text" id="new-maximo" style="width: 100%; border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font-size: 13px;">
+</div>
+<div>
+<label style="font-family: var(--mono); font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px;">Locatie</label>
+<input type="text" id="new-locatie" style="width: 100%; border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font-size: 13px;">
+</div>
+<div style="display: flex; gap: 8px;">
+<button type="submit" class="btn btn-primary" style="flex: 1;">Opslaan</button>
+<button type="button" class="btn btn-outline" style="flex: 1;" onclick="sluitOverlay('overlay-nieuw')">Annuleer</button>
+</div>
+</form>
+</div>
+</div>
+
+<script>
+let _data = {installaties: [], geschiedenis: []};
+let _bezig = false, _jobId = null, _pollTimer = null;
+let _selectieAantal = 0;  // bijhouden hoeveel RO's geselecteerd waren bij start
+let _geselecteerdeNamen = [];  // namen van geselecteerde RO's bij start van job
+
+async function laadData() {
+  const r = await fetch("/api/ro-staalname").then(r => r.json());
+  _data = r;
+  renderInstallaties();
+  renderGeschiedenis();
+}
+
+function renderInstallaties() {
+  const tbody = document.getElementById("tbody-inst");
+  if (!_data.installaties.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Geen installaties</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _data.installaties.map((inst, i) => `
+    <tr>
+      <td><input type="checkbox" class="chk-inst" value="${inst.naam}"></td>
+      <td><strong>${inst.naam}</strong></td>
+      <td>${inst.locatie || '—'}</td>
+      <td style="font-family: var(--mono); font-size: 12px;">${inst.datum_laatste_staalname || '—'}</td>
+      <td>${inst.laatste_status ? `<span class="badge badge-ok">${inst.laatste_status}</span>` : '—'}</td>
+      <td style="font-family: var(--mono); font-size: 12px;">${inst.laatste_wo_id || '—'}</td>
+      <td>
+        <button class="btn btn-sm btn-outline" onclick="bewerkInstallatie(${i})">✏</button>
+        <button class="btn btn-sm btn-danger" onclick="verwijderInstallatie('${inst.naam}')">✕</button>
+      </td>
+    </tr>`).join('');
+}
+
+function renderGeschiedenis() {
+  const tbody = document.getElementById("tbody-gesch");
+  if (!_data.geschiedenis.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">Geen geschiedenis</td></tr>';
+    return;
+  }
+  tbody.innerHTML = _data.geschiedenis.map(g => `
+    <tr>
+      <td style="font-family: var(--mono); font-size: 12px;">${g.datum || '—'}</td>
+      <td>${g.naam || '—'}</td>
+      <td>${g.locatie || '—'}</td>
+      <td style="font-family: var(--mono); font-size: 12px;">${g.wo_id || '—'}</td>
+      <td>${g.status ? `<span class="badge badge-ok">${g.status}</span>` : '—'}</td>
+      <td>${g.ok ? '<span class="badge badge-ok">OK</span>' : '<span class="badge badge-danger">FOUT</span>'}</td>
+    </tr>`).join('');
+}
+
+function toggleAlles(chk) {
+  document.querySelectorAll(".chk-inst").forEach(c => c.checked = chk.checked);
+}
+
+function geselecteerdeNamen() {
+  return [...document.querySelectorAll(".chk-inst:checked")].map(c => c.value);
+}
+
+async function startWoAanmaken() {
+  if (_bezig) return;
+  const namen = geselecteerdeNamen();
+  if (!namen.length) {
+    toonStatus("⚠ Selecteer installaties", "warn");
+    return;
+  }
+  _bezig = true;
+  _selectieAantal = namen.length;
+  _geselecteerdeNamen = namen.slice();
+  setBtn(true);
+  document.getElementById("log-window").innerHTML = "";
+  document.getElementById("progress-bar").style.display = "block";
+  document.getElementById("resultaten").style.display = "none";
+  toonStatus(`<span class="spinner"></span> Bezig...`);
+
+  const r = await fetch("/api/ro-staalname/wo-opzoeken", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({selectie: namen}),
+  }).then(r => r.json());
+
+  if (!r.ok) {
+    toonStatus("❌ " + (r.fout || "Fout"));
+    _bezig = false;
+    setBtn(false);
+    return;
+  }
+
+  _jobId = r.job_id;
+  _pollTimer = setInterval(pollJob, 1200);
+}
+
+async function pollJob() {
+  const r = await fetch(`/api/ro-staalname/status/${_jobId}`).then(r => r.json());
+  
+  const lw = document.getElementById("log-window");
+  lw.innerHTML = (r.stap_logs || []).map(line => {
+    const cls = line.includes("✓") ? "log-ok" : line.includes("❌") ? "log-error" : "log-step";
+    return `<div class="${cls}">${line}</div>`;
+  }).join("");
+  lw.scrollTop = lw.scrollHeight;
+
+  const tot = _selectieAantal || geselecteerdeNamen().length;
+  const done = (r.resultaten || []).length;
+  document.getElementById("progress-fill").style.width = tot ? `${Math.round(done / tot * 100)}%` : "0%";
+
+  if (!r.bezig) {
+    clearInterval(_pollTimer);
+    _jobId = null;
+    _bezig = false;
+    setBtn(false);
+    toonStatus("✅ Klaar!");
+    await toonResultaten(r.resultaten || []);
+    // laadData() wordt aangeroepen nadat alle popups verwerkt zijn
+  }
+}
+
+// Wachtrij voor installaties die een keuze nodig hebben
+let _keuzeWachtrij = [];
+let _geenWoWachtrij = [];
+let _huidigGeenWo = null;
+
+async function toonResultaten(res) {
+  const tbody = document.getElementById("tbody-resultaten");
+  tbody.innerHTML = res.map(r => {
+    let woTekst, badge;
+    if (r.keuze_nodig) {
+      woTekst = `<span style="color: var(--accent); font-family: var(--mono); font-size: 11px;">⚠ KEUZE VEREIST</span>`;
+      badge   = `<span class="badge" style="background:#fff3cd;color:#856404;">KEUZE</span>`;
+    } else if (r.geen_wo) {
+      woTekst = `<span style="color: #dc3545; font-family: var(--mono); font-size: 11px;">✗ GEEN WO</span>`;
+      badge   = `<span class="badge" style="background:#f8d7da;color:#842029;">GEEN WO</span>`;
+    } else if (r.al_inuitv) {
+      woTekst = `<span style="font-family: var(--mono);">${r.wo_id}</span>`;
+      badge   = `<span class="badge" style="background:#cfe2ff;color:#084298;">INUITV</span>`;
+    } else {
+      woTekst = r.wo_id || '—';
+      badge   = r.ok
+        ? `<span class="badge badge-ok">OK</span>`
+        : `<span class="badge badge-danger">FOUT</span>`;
+    }
+    return `
+    <tr>
+      <td style="font-weight: 600;">${r.naam}</td>
+      <td style="font-family: var(--mono);">${woTekst}</td>
+      <td>${r.status || '—'}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join("");
+  document.getElementById("resultaten").style.display = "block";
+
+  // Wachtrijen opbouwen
+  _keuzeWachtrij  = res.filter(r => r.keuze_nodig && r.keuze_opties);
+  _geenWoWachtrij = res.filter(r => r.geen_wo || r.al_inuitv);
+
+  // Eerst keuzes verwerken, daarna geen-wo popups
+  if (_keuzeWachtrij.length) {
+    verwerkVolgendeKeuze();
+  } else if (_geenWoWachtrij.length) {
+    verwerkVolgendeGeenWo();
+  } else {
+    // Geen popups nodig: data verversen en afdrukken
+    await laadData();
+    setTimeout(() => printTicketten(_geselecteerdeNamen), 500);
+  }
+}
+
+// ── Keuze popup ──────────────────────────────────────────────────────────────
+
+function verwerkVolgendeKeuze() {
+  if (!_keuzeWachtrij.length) {
+    if (_geenWoWachtrij.length) verwerkVolgendeGeenWo();
+    return;
+  }
+  openKeuzePopup(_keuzeWachtrij[0]);
+}
+
+function openKeuzePopup(item) {
+  document.getElementById("keuze-installatie-label").textContent =
+    `Installatie: ${item.naam} (${item.maximo}) — kies de juiste werkorder:`;
+
+  const opties = document.getElementById("keuze-opties");
+  opties.innerHTML = (item.keuze_opties || []).map(opt => `
+    <button class="btn btn-outline" style="text-align: left; padding: 10px 14px; display: flex; gap: 16px; align-items: center;"
+      onclick="kiesWO('${item.naam}', '${opt.wo_id}', '${opt.status}')">
+      <span style="font-family: var(--mono); font-weight: 700; color: var(--accent); min-width: 90px;">${opt.wo_id}</span>
+      <span style="font-size: 12px; color: var(--muted);">${opt.status}</span>
+      <span style="font-size: 12px; flex: 1;">${opt.omschrijving || ''}</span>
+    </button>`).join("");
+
+  document.getElementById("overlay-wo-keuze").style.display = "flex";
+}
+
+async function kiesWO(naam, wo_id, status) {
+  document.getElementById("overlay-wo-keuze").style.display = "none";
+
+  await fetch("/api/ro-staalname/wo-keuze", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({naam, wo_id, status}),
+  });
+
+  _keuzeWachtrij.shift();
+  if (_keuzeWachtrij.length) {
+    setTimeout(verwerkVolgendeKeuze, 200);
+  } else if (_geenWoWachtrij.length) {
+    setTimeout(verwerkVolgendeGeenWo, 200);
+  } else {
+    await laadData();
+    setTimeout(() => printTicketten(_geselecteerdeNamen), 500);
+  }
+}
+
+function sluitKeuzePopup() {
+  document.getElementById("overlay-wo-keuze").style.display = "none";
+  _keuzeWachtrij.shift();
+  if (_keuzeWachtrij.length) {
+    setTimeout(verwerkVolgendeKeuze, 200);
+  } else if (_geenWoWachtrij.length) {
+    setTimeout(verwerkVolgendeGeenWo, 200);
+  } else {
+    laadData();
+  }
+}
+
+// ── Geen WO popup ─────────────────────────────────────────────────────────────
+
+function verwerkVolgendeGeenWo() {
+  if (!_geenWoWachtrij.length) {
+    laadData();
+    // Automatisch ticketten afdrukken na verwerken alle WO's
+    setTimeout(() => printTicketten(_geselecteerdeNamen), 500);
+    return;
+  }
+  _huidigGeenWo = _geenWoWachtrij[0];
+  const inst = _huidigGeenWo;
+  const tekst = inst.al_inuitv
+    ? `Voor ${inst.naam} staat er al een WO in uitvoering (${inst.wo_id}). Wil je een nieuwe werkorder aanmaken voor deze staalname?`
+    : `Voor ${inst.naam} (${inst.maximo || '?'}) werd geen werkorder gevonden met status GOED. Wil je een nieuwe WO aanmaken?`;
+  document.getElementById("geen-wo-label").textContent = tekst;
+  document.getElementById("overlay-geen-wo").style.display = "flex";
+}
+
+async function maakNieuweWO() {
+  document.getElementById("overlay-geen-wo").style.display = "none";
+  if (!_huidigGeenWo) return;
+
+  const inst = _huidigGeenWo;
+  toonStatus(`<span class="spinner"></span> WO aanmaken voor ${inst.naam}...`);
+
+  const startRes = await fetch("/api/ro-staalname/maak-wo", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({naam: inst.naam, maximo: inst.maximo, locatie: inst.locatie || ""}),
+  }).then(r => r.json());
+
+  if (!startRes.ok) {
+    toonStatus(`❌ WO aanmaken mislukt: ${startRes.fout || "onbekende fout"}`);
+    _geenWoWachtrij.shift();
+    _huidigGeenWo = null;
+    if (_geenWoWachtrij.length) setTimeout(verwerkVolgendeGeenWo, 200);
+    else { await laadData(); setTimeout(() => printTicketten(_geselecteerdeNamen), 500); }
+    return;
+  }
+
+  // Poll tot job klaar
+  const jobId = startRes.job_id;
+  await new Promise(resolve => {
+    const t = setInterval(async () => {
+      const r = await fetch(`/api/ro-staalname/maak-wo-status/${jobId}`).then(r => r.json());
+      const lw = document.getElementById("log-window");
+      if (r.log && r.log.length) {
+        lw.innerHTML = r.log.map(l => `<div class="log-step">${l}</div>`).join("");
+        lw.scrollTop = lw.scrollHeight;
+      }
+      if (!r.bezig) {
+        clearInterval(t);
+        if (r.resultaat && r.resultaat.ok) {
+          toonStatus(`✅ WO aangemaakt: ${r.resultaat.wo_id}`);
+        } else {
+          toonStatus(`❌ WO aanmaken mislukt: ${r.resultaat?.fout || "onbekend"}`);
+        }
+        resolve();
+      }
+    }, 1500);
+  });
+
+  _geenWoWachtrij.shift();
+  _huidigGeenWo = null;
+  if (_geenWoWachtrij.length) {
+    setTimeout(verwerkVolgendeGeenWo, 200);
+  } else {
+    await laadData();
+    setTimeout(() => printTicketten(_geselecteerdeNamen), 500);
+  }
+}
+
+function sluitGeenWoPopup() {
+  document.getElementById("overlay-geen-wo").style.display = "none";
+  _geenWoWachtrij.shift();
+  _huidigGeenWo = null;
+  if (_geenWoWachtrij.length) {
+    setTimeout(verwerkVolgendeGeenWo, 200);
+  } else {
+    laadData();
+  }
+}
+
+function opzoekenWO() {
+  startWoAanmaken();
+}
+
+async function printTicketten(namen) {
+  const geselecteerd = namen || [...document.querySelectorAll(".chk-inst:checked")].map(c => c.value);
+  if (!geselecteerd.length) {
+    alert("Selecteer eerst één of meerdere installaties.");
+    return;
+  }
+  const r = await fetch("/api/ro-staalname/print-ticketten", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({namen: geselecteerd}),
+  });
+  const data = await r.json();
+  if (!data.ok) { alert(data.fout); return; }
+
+  // Sla installaties op in sessionStorage en navigeer naar printpagina
+  sessionStorage.setItem("ro_print_installaties", JSON.stringify(data.installaties));
+  // Gebruik location.href ipv window.open om popup-blokkering te vermijden
+  window.location.href = "/ro-staalname/ticketten";
+}
+
+function toonStatus(html, type) {
+  const el = document.getElementById("actie-status");
+  el.innerHTML = html;
+}
+
+function setBtn(bezig) {
+  const btn = document.getElementById("btn-start");
+  btn.disabled = bezig;
+  btn.innerHTML = bezig ? `<span class="spinner"></span> Bezig...` : `🔍 WO's opzoeken`;
+}
+
+function clearLog() {
+  document.getElementById("log-window").innerHTML = "";
+  document.getElementById("actie-status").innerHTML = "";
+  document.getElementById("progress-bar").style.display = "none";
+  document.getElementById("resultaten").style.display = "none";
+}
+
+function openNieuweInstallatie() {
+  _bewerkIndex = null;
+  document.getElementById("new-naam").value = "";
+  document.getElementById("new-maximo").value = "";
+  document.getElementById("new-locatie").value = "";
+  document.getElementById("overlay-nieuw-titel").textContent = "Nieuwe Installatie";
+  document.getElementById("overlay-nieuw").style.display = "flex";
+}
+
+let _bewerkIndex = null;
+
+function bewerkInstallatie(i) {
+  _bewerkIndex = i;
+  const inst = _data.installaties[i];
+  document.getElementById("new-naam").value = inst.naam;
+  document.getElementById("new-maximo").value = inst.maximo || "";
+  document.getElementById("new-locatie").value = inst.locatie || "";
+  document.getElementById("overlay-nieuw-titel").textContent = "Installatie Bewerken";
+  document.getElementById("overlay-nieuw").style.display = "flex";
+}
+
+async function slaInstallatiOp() {
+  const naam = document.getElementById("new-naam").value.trim();
+  const maximo = document.getElementById("new-maximo").value.trim();
+  const locatie = document.getElementById("new-locatie").value.trim();
+
+  if (!naam) return;
+
+  const inst = _data.installaties;
+
+  if (_bewerkIndex !== null) {
+    // Bewerken: bestaand toestel updaten
+    inst[_bewerkIndex] = { ...inst[_bewerkIndex], naam, maximo, locatie };
+  } else {
+    // Nieuw toestel toevoegen
+    inst.push({naam, maximo, locatie, datum_laatste_staalname: null, laatste_status: null, laatste_wo_id: null});
+  }
+  inst.sort((a, b) => a.naam.localeCompare(b.naam));
+
+  await fetch("/api/ro-staalname/installaties", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({installaties: inst}),
+  });
+
+  sluitOverlay("overlay-nieuw");
+  await laadData();
+}
+
+async function verwijderInstallatie(naam) {
+  if (!confirm(`Verwijderen: ${naam}?`)) return;
+  await fetch(`/api/ro-staalname/installatie/${encodeURIComponent(naam)}`, {method: "DELETE"});
+  await laadData();
+}
+
+async function wisGeschiedenis() {
+  if (!confirm("Wis geschiedenis?")) return;
+  await fetch("/api/ro-staalname/geschiedenis/wis", {method: "POST"});
+  await laadData();
+}
+
+function sluitOverlay(id) {
+  document.getElementById(id).style.display = "none";
+}
+
+laadData();
+</script>
+
+<script>
+(function() {
+  var _start = null;
+  setInterval(async function() {
+    try {
+      var r = await fetch("/api/ping").then(function(x){return x.json();});
+      if (_start === null) { _start = r.start; return; }
+      if (r.start !== _start) { location.reload(); }
+    } catch(e) {}
+  }, 3000);
+})();
+</script>
+</body>
+</html>

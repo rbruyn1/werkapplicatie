@@ -1,0 +1,564 @@
+{% set actieve_pagina = 'toestel-werkorder' %}
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Snelle Werkorder</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #f0f2f7;
+      --panel:   #ffffff;
+      --border:  #d0d5e0;
+      --text:    #1a1f2e;
+      --muted:   #6070a0;
+      --accent:  #1a6bdd;
+      --mono:    'Trebuchet MS', sans-serif;
+      --sans:    'Trebuchet MS', sans-serif;
+    }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f2f5;
+      color: #222;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 0 30px;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px; background: var(--panel);
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+      width: 100%;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    h1.header-title { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: #1a1f2e; margin: 0; }
+    #header-clock { font-family: var(--mono); font-size: 36px; font-weight: 700; letter-spacing: 1px; color: #1d9fbf; margin-left: 4px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .nav-link {
+      font-family: var(--mono); font-size: 12px; color: var(--muted);
+      text-decoration: none; border: 1px solid var(--border);
+      padding: 7px 14px; border-radius: 3px; letter-spacing: .5px;
+      transition: all .15s;
+    }
+    .nav-link:hover { border-color: var(--accent); color: var(--accent); }
+    .nav-link.actief {
+      border-color: var(--accent); color: #fff; background: var(--accent);
+    }
+
+    .pagina-inhoud {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 16px 0;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      margin-bottom: 24px;
+      color: #1a3a5c;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #555;
+      margin-bottom: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .input-row { display: flex; gap: 8px; }
+
+    input[type="text"], input[type="number"], textarea {
+      width: 100%;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 9px 12px;
+      font-size: 0.95rem;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+
+    input[type="text"]:focus, input[type="number"]:focus, textarea:focus {
+      outline: none;
+      border-color: #1a6bbf;
+    }
+
+    textarea { resize: vertical; min-height: 80px; }
+
+    .char-count { font-size: 0.78rem; color: #999; text-align: right; margin-top: 3px; }
+    .char-count.over { color: #c0392b; }
+
+    .toestel-info {
+      background: #eaf3fb;
+      border: 1px solid #b3d4ef;
+      border-radius: 5px;
+      padding: 10px 14px;
+      font-size: 0.88rem;
+      color: #1a4a7a;
+      margin-top: 6px;
+      display: none;
+    }
+    .toestel-info.zichtbaar { display: block; }
+    .toestel-info strong { display: block; font-size: 0.95rem; }
+
+    .btn {
+      border: none;
+      border-radius: 5px;
+      padding: 9px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .btn-zoek { background: #1a6bbf; color: #fff; white-space: nowrap; }
+    .btn-zoek:hover:not(:disabled) { background: #155a9e; }
+
+    .btn-submit {
+      background: #27ae60; color: #fff;
+      width: 100%; padding: 11px; font-size: 1rem; margin-top: 6px;
+    }
+    .btn-submit:hover:not(:disabled) { background: #219150; }
+
+    .btn-direct {
+      background: #6c3fc5; color: #fff;
+      width: 100%; padding: 11px; font-size: 1rem; margin-top: 6px;
+    }
+    .btn-direct:hover:not(:disabled) { background: #5a33a8; }
+
+    .knop-groep { display: flex; gap: 10px; margin-top: 6px; }
+    .knop-groep .btn-submit,
+    .knop-groep .btn-direct { flex: 1; margin-top: 0; }
+
+    .log-box {
+      background: #1a1a2e; color: #c8f0a0;
+      border-radius: 6px; padding: 14px 16px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 0.82rem; max-height: 280px; overflow-y: auto;
+      margin-top: 20px; display: none;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .log-box.zichtbaar { display: block; }
+
+    .resultaat {
+      border-radius: 6px; padding: 14px 18px;
+      margin-top: 16px; font-size: 0.95rem; display: none;
+    }
+    .resultaat.zichtbaar { display: block; }
+    .resultaat.ok  { background: #d4edda; border: 1px solid #a3cfbb; color: #1a5c35; }
+    .resultaat.fout { background: #fde8e8; border: 1px solid #f0a0a0; color: #8b1a1a; }
+    .resultaat .wo-link { font-weight: 700; font-size: 1.05rem; display: block; margin-bottom: 4px; }
+
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #fff; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #toegang-geblokkeerd { text-align: center; padding: 40px 20px; color: #888; }
+    #toegang-geblokkeerd h2 { color: #c0392b; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <img src="/assets/image.png" alt="UZ Leuven" style="height:48px;width:auto;">
+    <span id="header-clock">--:--:--</span>
+    <h1 class="header-title">Werkorder Dashboard</h1>
+  </div>
+  <div class="header-right">
+    {% include "_nav.html" %}
+  </div>
+</header>
+
+<div class="pagina-inhoud">
+
+<h1>⚡ Snelle Werkorder</h1>
+
+<div class="card" id="hoofd-formulier" style="display:none;">
+
+  <!-- Toestelnummer + zoeken -->
+  <div class="form-group">
+    <label>Verkortingsnummer toestel <small style="font-weight:400;text-transform:none">(of rechtstreeks T-nummer)</small></label>
+    <div class="input-row">
+      <input type="text" id="verkortingsnummer" placeholder="bv. 200 of T64952"
+             autocomplete="off" spellcheck="false">
+      <button class="btn btn-zoek" id="btn-zoek" onclick="zoekToestel()">Zoeken</button>
+    </div>
+    <div class="toestel-info" id="toestel-info">
+      <strong id="toestel-tnummer"></strong>
+      <span id="toestel-omschr"></span>
+    </div>
+  </div>
+
+  <!-- Probleemmelding -->
+  <div class="form-group">
+    <label>Probleemmelding <small style="font-weight:400;text-transform:none">(max 50 tekens)</small></label>
+    <input type="text" id="probleemmelding" maxlength="50"
+           placeholder="Korte omschrijving van het probleem"
+           oninput="updateCharCount()">
+    <div class="char-count" id="char-count">0 / 50</div>
+  </div>
+
+  <!-- Oplossing -->
+  <div class="form-group">
+    <label>Oplossing / uitgevoerde werken</label>
+    <textarea id="oplossing" placeholder="Beschrijving van wat er gedaan werd..."></textarea>
+  </div>
+
+  <!-- Uren -->
+  <div class="form-group">
+    <label>Uren</label>
+    <input type="text" id="uren" placeholder="bv. 1  |  1.5  |  2u30"
+           style="max-width:180px" autocomplete="off">
+  </div>
+
+  <!-- Knoppen -->
+  <div class="knop-groep">
+    <button class="btn btn-submit" id="btn-submit" onclick="maakWO()" disabled
+            title="Zoek eerst het toestel op, maak dan het WO aan">
+      ✅ Werkorder aanmaken
+    </button>
+    <button class="btn btn-direct" id="btn-direct" onclick="directAanmaken()" disabled
+            title="Zoekt het toestel op én maakt het WO aan in één stap">
+      ⚡ Direct aanmaken
+    </button>
+  </div>
+
+  <!-- Log -->
+  <div class="log-box" id="log-box"></div>
+
+  <!-- Resultaat -->
+  <div class="resultaat" id="resultaat"></div>
+
+</div>
+
+<!-- Log van eerder aangemaakte snelle werkorders -->
+<div class="card" id="tw-log-card" style="max-width:900px;margin-top:24px;">
+  <h2 style="font-size:1.05rem;font-weight:600;color:#1a3a5c;margin-bottom:16px;">📋 Log — snelle werkorders</h2>
+  <div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="text-align:left;border-bottom:1px solid var(--border)">
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;white-space:nowrap;">DATUM</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;white-space:nowrap;">TOESTEL (T-NR)</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;">PROBLEEMMELDING</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;">OPLOSSING</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;white-space:nowrap;">WO-NUMMER</th>
+          <th style="padding:8px 10px;color:var(--muted);font-size:11px;letter-spacing:.5px;white-space:nowrap;">GEBRUIKER</th>
+        </tr>
+      </thead>
+      <tbody id="tw-log-body"></tbody>
+    </table>
+  </div>
+</div>
+</div>
+
+<script>
+  let tNummer = "";
+  let jobId = null;
+  let pollTimer = null;
+
+  // ── Klok ──
+  function updateClock() {
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const el = document.getElementById('header-clock');
+    if (el) el.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  // ── Toegangscontrole ──
+  // Deze pagina is beschikbaar voor alle gebruikers (niet langer beperkt tot rbruyn1).
+  async function controleerToegang() {
+    document.getElementById("hoofd-formulier").style.display = "";
+  }
+
+  // ── Tekencount ──
+  function updateCharCount() {
+    const val = document.getElementById("probleemmelding").value;
+    const el = document.getElementById("char-count");
+    el.textContent = `${val.length} / 50`;
+    el.classList.toggle("over", val.length > 50);
+    updateSubmitBtn();
+  }
+
+  function updateSubmitBtn() {
+    const velden = document.getElementById("probleemmelding").value.trim() &&
+                   document.getElementById("oplossing").value.trim() &&
+                   document.getElementById("uren").value.trim();
+    const heeftVerkortingsnr = document.getElementById("verkortingsnummer").value.trim();
+
+    // "Werkorder aanmaken" vereist dat toestel al opgezocht is (tNummer bekend)
+    document.getElementById("btn-submit").disabled = !(tNummer && velden);
+    // "Direct aanmaken" vereist enkel verkortingsnummer + velden ingevuld
+    document.getElementById("btn-direct").disabled = !(heeftVerkortingsnr && velden);
+  }
+
+  document.getElementById("verkortingsnummer").addEventListener("input", updateSubmitBtn);
+  document.getElementById("probleemmelding").addEventListener("input", updateSubmitBtn);
+  document.getElementById("oplossing").addEventListener("input", updateSubmitBtn);
+  document.getElementById("uren").addEventListener("input", updateSubmitBtn);
+
+  // ── Toestel zoeken ──
+  async function zoekToestel() {
+    const verk = document.getElementById("verkortingsnummer").value.trim();
+    if (!verk) return;
+
+    const btn = document.getElementById("btn-zoek");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Zoeken...';
+
+    verbergResultaat();
+    logLeeg();
+
+    tNummer = "";
+    document.getElementById("toestel-info").classList.remove("zichtbaar");
+    updateSubmitBtn();
+
+    try {
+      const r = await fetch("/api/toestel-werkorder/zoek-tnummer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verkortingsnummer: verk })
+      });
+      const data = await r.json();
+
+      if (data.ok) {
+        tNummer = data.t_nummer;
+        document.getElementById("toestel-tnummer").textContent = data.t_nummer;
+        document.getElementById("toestel-omschr").textContent = data.omschrijving || "";
+        document.getElementById("toestel-info").classList.add("zichtbaar");
+        updateSubmitBtn();
+      } else {
+        toonFout(data.fout || "Toestel niet gevonden");
+      }
+    } catch (e) {
+      toonFout("Verbindingsfout: " + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Zoeken";
+    }
+  }
+
+  document.getElementById("verkortingsnummer").addEventListener("keydown", e => {
+    if (e.key === "Enter") zoekToestel();
+  });
+
+  // ── WO aanmaken (tweedelige flow: zoek eerst, dan hier) ──
+  async function maakWO() {
+    const probleemmelding = document.getElementById("probleemmelding").value.trim();
+    const oplossing       = document.getElementById("oplossing").value.trim();
+    const uren            = document.getElementById("uren").value.trim();
+
+    if (!tNummer || !probleemmelding || !oplossing || !uren) return;
+
+    const btn = document.getElementById("btn-submit");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Bezig...';
+
+    verbergResultaat();
+    logLeeg();
+    document.getElementById("log-box").classList.add("zichtbaar");
+
+    try {
+      const r = await fetch("/api/toestel-werkorder/maak-wo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ t_nummer: tNummer, probleemmelding, oplossing, uren })
+      });
+      const data = await r.json();
+      jobId = data.job_id;
+      if (jobId) {
+        pollStatus(btn, "✅ Werkorder aanmaken");
+      } else {
+        toonFout(data.fout || "Onbekende fout bij starten job");
+        btn.disabled = false;
+        btn.textContent = "✅ Werkorder aanmaken";
+      }
+    } catch (e) {
+      toonFout("Verbindingsfout: " + e.message);
+      btn.disabled = false;
+      btn.textContent = "✅ Werkorder aanmaken";
+    }
+  }
+
+  // ── Direct aanmaken (zoeken + WO in één stap) ──
+  async function directAanmaken() {
+    const verk            = document.getElementById("verkortingsnummer").value.trim();
+    const probleemmelding = document.getElementById("probleemmelding").value.trim();
+    const oplossing       = document.getElementById("oplossing").value.trim();
+    const uren            = document.getElementById("uren").value.trim();
+
+    if (!verk || !probleemmelding || !oplossing || !uren) return;
+
+    const btn  = document.getElementById("btn-direct");
+    const btnS = document.getElementById("btn-submit");
+    btn.disabled  = true;
+    btnS.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>Bezig...';
+
+    verbergResultaat();
+    logLeeg();
+    document.getElementById("log-box").classList.add("zichtbaar");
+
+    try {
+      const r = await fetch("/api/toestel-werkorder/direct", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verkortingsnummer: verk, probleemmelding, oplossing, uren })
+      });
+      const data = await r.json();
+      jobId = data.job_id;
+      if (jobId) {
+        pollStatus(btn, "⚡ Direct aanmaken");
+      } else {
+        toonFout(data.fout || "Onbekende fout bij starten job");
+        btn.disabled  = false;
+        btnS.disabled = !(tNummer && probleemmelding && oplossing && uren);
+        btn.textContent = "⚡ Direct aanmaken";
+      }
+    } catch (e) {
+      toonFout("Verbindingsfout: " + e.message);
+      btn.disabled  = false;
+      btnS.disabled = !(tNummer && probleemmelding && oplossing && uren);
+      btn.textContent = "⚡ Direct aanmaken";
+    }
+  }
+
+  // ── Poll job status ──
+  function pollStatus(activeBtn, activeLabel) {
+    pollTimer = setInterval(async () => {
+      try {
+        const r = await fetch(`/api/toestel-werkorder/job/${jobId}`);
+        const data = await r.json();
+
+        if (data.log) logTonen(data.log);
+
+        // Als T-nummer terugkomt van direct-flow: toon het in de info-box
+        if (data.t_nummer && !tNummer) {
+          tNummer = data.t_nummer;
+          document.getElementById("toestel-tnummer").textContent = data.t_nummer;
+          document.getElementById("toestel-omschr").textContent = "";
+          document.getElementById("toestel-info").classList.add("zichtbaar");
+        }
+
+        if (data.klaar) {
+          clearInterval(pollTimer);
+          activeBtn.disabled  = false;
+          activeBtn.textContent = activeLabel;
+          updateSubmitBtn();
+
+          if (data.ok) {
+            toonOk(data.wo_id);
+          } else {
+            toonFout(data.fout || "WO aanmaken mislukt");
+          }
+        }
+      } catch (e) {
+        // Tijdelijke verbindingsfout — blijven pollen
+      }
+    }, 2000);
+  }
+
+  // ── Helpers ──
+  function logLeeg() {
+    document.getElementById("log-box").textContent = "";
+  }
+
+  function logTonen(regels) {
+    const box = document.getElementById("log-box");
+    box.textContent = Array.isArray(regels) ? regels.join("\n") : regels;
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function verbergResultaat() {
+    const el = document.getElementById("resultaat");
+    el.className = "resultaat";
+    el.innerHTML = "";
+  }
+
+  function toonOk(woId) {
+    const el = document.getElementById("resultaat");
+    el.className = "resultaat ok zichtbaar";
+    const url = woId
+      ? `https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD_1/EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL?Page=UZFM_WO_ALG&Action=U&BUSINESS_UNIT=POUZL&UZ_WO_ID=${woId}&TargetFrameName=None`
+      : "#";
+    el.innerHTML = `
+      <span class="wo-link">✓ Werkorder aangemaakt</span>
+      ${woId ? `<a href="${url}" target="_blank">WO ${woId} openen in PeopleSoft →</a>` : ""}
+    `;
+    laadTwLog();
+  }
+
+  function toonFout(msg) {
+    const el = document.getElementById("resultaat");
+    el.className = "resultaat fout zichtbaar";
+    el.innerHTML = `<strong>❌ Fout:</strong> ${msg}`;
+  }
+
+  // ── Log: eerder aangemaakte snelle werkorders ──
+  function escHTML(s) {
+    return String(s ?? "").replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function laadTwLog() {
+    const body = document.getElementById("tw-log-body");
+    if (!body) return;
+    try {
+      const r = await fetch("/api/toestel-werkorder/log");
+      const regels = await r.json();
+      if (!Array.isArray(regels) || !regels.length) {
+        body.innerHTML = `<tr><td colspan="6" style="padding:16px 10px;color:var(--muted);text-align:center;">Nog geen snelle werkorders aangemaakt</td></tr>`;
+        return;
+      }
+      const url = t => `https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD_1/EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL?Page=UZFM_WO_ALG&Action=U&BUSINESS_UNIT=POUZL&UZ_WO_ID=${t}&TargetFrameName=None`;
+      body.innerHTML = regels.map(rg => `
+        <tr style="border-bottom:1px solid #eef0f6;">
+          <td style="padding:8px 10px;white-space:nowrap;color:var(--muted);">${escHTML(rg.datum)}</td>
+          <td style="padding:8px 10px;white-space:nowrap;font-weight:600;">${escHTML(rg.t_nummer)}</td>
+          <td style="padding:8px 10px;max-width:260px;">${escHTML(rg.probleemmelding)}</td>
+          <td style="padding:8px 10px;max-width:300px;color:var(--muted);">${escHTML(rg.oplossing)}</td>
+          <td style="padding:8px 10px;white-space:nowrap;">
+            ${rg.wo_id ? `<a href="${url(rg.wo_id)}" target="_blank" style="color:var(--accent);font-weight:600;text-decoration:none;">${escHTML(rg.wo_id)}</a>` : "—"}
+          </td>
+          <td style="padding:8px 10px;white-space:nowrap;color:var(--muted);">${escHTML(rg.gebruiker) || "—"}</td>
+        </tr>`).join("");
+    } catch (e) {
+      body.innerHTML = `<tr><td colspan="6" style="padding:16px 10px;color:var(--muted);text-align:center;">Log kon niet geladen worden</td></tr>`;
+    }
+  }
+
+  // ── Init ──
+  controleerToegang();
+  laadTwLog();
+</script>
+</body>
+</html>
