@@ -112,9 +112,27 @@ def _lees_json_veilig(pad: Path, standaard):
         return standaard
 
 # ── Schrijf logs ook naar bestand zodat collega's ze live kunnen volgen ──
+# Dagelijkse rotatie i.p.v. één eeuwig groeiend bestand: elke nacht om
+# middernacht wordt app.log hernoemd naar app.log.YYYY-MM-DD en begint er
+# een nieuwe. Aantal bewaarde dagen is instelbaar via config.json
+# ("app_log_retentie_dagen"), standaard 5 als dat veld ontbreekt.
+# load_config() bestaat op dit punt in het bestand nog niet — config.json
+# wordt hier dus rechtstreeks gelezen, met een stille fallback op de
+# standaardwaarde bij een ontbrekend/corrupt bestand.
+def _lees_log_retentie_dagen(standaard: int = 5) -> int:
+    try:
+        with open(Path(__file__).parent / "config.json", encoding="utf-8") as f:
+            return int(json.load(f).get("app_log_retentie_dagen", standaard))
+    except Exception:
+        return standaard
+
 _LOG_DIR = Path(__file__).parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
-_file_handler = logging.FileHandler(_LOG_DIR / "app.log", encoding="utf-8")
+from logging.handlers import TimedRotatingFileHandler
+_file_handler = TimedRotatingFileHandler(
+    _LOG_DIR / "app.log", when="midnight",
+    backupCount=_lees_log_retentie_dagen(), encoding="utf-8"
+)
 _file_handler.setLevel(logging.INFO)
 _file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 class _AppLogFilter(logging.Filter):
@@ -125,51 +143,6 @@ _file_handler.addFilter(_AppLogFilter())
 logging.getLogger().addHandler(_file_handler)
 
 app = Flask(__name__)
-
-
-def app_modus() -> str:
-    """'volledig' (standaard) of 'beperkt' - uit config.json, veld 'modus'.
-    Beperkt pakket = enkel Service Rapporten + Snelle Werkorder; geen
-    PeopleSoft-scraper, geen OneDrive-sync, geen dashboard/thuisdialyse/
-    RO-staalname/staalresultaten/logs. Bedoeld voor een standalone-
-    installatie bij een collega die enkel die twee functies nodig heeft."""
-    try:
-        return load_config().get("modus", "volledig")
-    except Exception:
-        return "volledig"
-
-
-# Paden die ook in 'beperkt'-modus bereikbaar blijven. Bewust een
-# ALLOW-lijst (niet een block-lijst): bij een nieuwe route later is de
-# veilige standaard 'niet bereikbaar in beperkt pakket' tot iemand het hier
-# expliciet toevoegt, in plaats van per ongeluk toch open te staan.
-_BEPERKT_TOEGESTANE_PREFIXES = (
-    "/api/ping", "/assets/", "/favicon", "/.well-known/",
-    "/api/current_user", "/api/shutdown",
-    "/service-rapporten", "/api/service-rapporten",
-    "/toestel-werkorder", "/api/toestel-werkorder",
-)
-
-
-@app.before_request
-def _beperk_toegang_indien_nodig():
-    if app_modus() != "beperkt":
-        return None
-    pad = request.path
-    if pad == "/":
-        return redirect("/service-rapporten")
-    if any(pad.startswith(p) for p in _BEPERKT_TOEGESTANE_PREFIXES):
-        return None
-    if pad.startswith("/api/"):
-        return jsonify({"ok": False, "fout": "Niet beschikbaar in beperkt pakket "
-                                               "(enkel Service Rapporten + Snelle Werkorder)."}), 403
-    return redirect("/service-rapporten")
-
-
-@app.context_processor
-def _inject_app_modus():
-    return {"app_modus": app_modus()}
-
 
 # ── Globale JSON error handler: voorkomt HTML 500-pagina's op /api/ routes ──
 @app.errorhandler(Exception)
@@ -305,7 +278,15 @@ def verwijder_lock():
 
 
 def update_lock_ping():
-    """Houdt de ping in de lock actueel — enkel nog voor monitoring/info, niet voor timeout."""
+    """Houdt de ping in de lock actueel — enkel nog voor monitoring/info, niet voor timeout.
+
+    Herkanst hier ook elke minuut het opstarten van de OneDrive-sync.
+    start_onedrive_sync() is idempotent (doet niets als de observer al
+    actief is), dus dit is goedkoop — maar het zorgt ervoor dat een
+    eenmalige opstart-mislukking (bv. een tijdelijke netwerk-hik) zichzelf
+    binnen de minuut herstelt, in plaats van te blijven hangen tot iemand
+    manueel op "Herstart" klikt.
+    """
     hostname = socket.gethostname()
     while True:
         try:
@@ -313,6 +294,11 @@ def update_lock_ping():
                                               "ping": __import__("time").time()}))
         except Exception:
             pass
+        try:
+            from onedrive_sync import start_onedrive_sync
+            start_onedrive_sync(load_config())
+        except Exception as e:
+            log.error(f"OneDrive-sync herkansing mislukt: {e}")
         __import__("time").sleep(60)
 
 
@@ -437,15 +423,6 @@ def start_background_scraper():
     _scraper_stop.set()
     _scraper_stop = threading.Event()
     stop_event    = _scraper_stop
-
-    if app_modus() == "beperkt":
-        # Beperkt pakket heeft geen dashboard/scraper nodig: Service
-        # Rapporten en Snelle Werkorder loggen elk zelf per actie in via
-        # Playwright (zie wo_service_rapport.py / wo_toestel_werkorder.py),
-        # onafhankelijk van deze achtergrond-loop.
-        login_status = {"ok": True, "bericht": "Beperkt pakket - enkel Service Rapporten "
-                                                "+ Snelle Werkorder, geen achtergrond-scraper."}
-        return
 
     cfg = load_config()
     if not cfg.get("username") or cfg.get("username") == "JOU_USERNAME_HIER":
@@ -3022,20 +2999,15 @@ if __name__ == "__main__":
         pass  # geen vorige instantie actief, gewoon doorgaan
 
     start_background_scraper()
-    if app_modus() == "beperkt":
-        log.info(f"Beperkt pakket actief - Service Rapporten op http://0.0.0.0:{port}/service-rapporten")
-        log.info(f"Snelle Werkorder op http://0.0.0.0:{port}/toestel-werkorder")
-    else:
-        log.info(f"Dashboard beschikbaar op http://0.0.0.0:{port}")
-        log.info(f"Thuisdialyse beschikbaar op http://0.0.0.0:{port}/thuisdialyse")
-        log.info(f"RO Staalnames beschikbaar op http://0.0.0.0:{port}/ro-staalname")
-        log.info("Collega's kunnen verbinden via http://<jouw-ip>:5000")
+    log.info(f"Dashboard beschikbaar op http://0.0.0.0:{port}")
+    log.info(f"Thuisdialyse beschikbaar op http://0.0.0.0:{port}/thuisdialyse")
+    log.info(f"RO Staalnames beschikbaar op http://0.0.0.0:{port}/ro-staalname")
+    log.info("Collega's kunnen verbinden via http://<jouw-ip>:5000")
 
     # Browser openen — zoek Chrome of Edge, open als nieuw tabblad in bestaand venster
     def _open_browser():
         import subprocess, shutil
-        startpad = "/service-rapporten" if app_modus() == "beperkt" else "/"
-        url = f"http://localhost:{port}{startpad}"
+        url = f"http://localhost:{port}"
         # Chrome: --new-tab opent tabblad in bestaand venster
         chrome = (
             shutil.which("chrome") or
