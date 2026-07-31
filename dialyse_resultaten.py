@@ -507,7 +507,14 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
     maximo   = staal.get("maximo", "").strip()
     datum_str = staal.get("datum", "")  # dd/mm/yyyy
 
-    # Bereken zoekvenster: 14 dagen voor t/m 14 dagen na de staaldatum
+    # Bereken zoekvenster: 14 dagen voor t/m 14 dagen na de staaldatum.
+    # Voor Genius-toestellen komen de resultaten via een geautomatiseerd
+    # systeem in PeopleSoft binnen, met meer vertraging dan bij andere
+    # toestellen — de ondergrens van het venster gaat voor Genius daarom
+    # een extra kalendermaand verder terug, anders wordt de WO soms niet
+    # gevonden.
+    is_genius = staal.get("eenheid", "").strip().lower().startswith("genius")
+
     try:
         staal_datum = datetime.strptime(datum_str, "%d/%m/%Y")
     except Exception:
@@ -528,11 +535,17 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
                 return {"ok": False, "wo_id": None, "status": None,
                         "fout": f"Ongeldige datum: {datum_str}"}
 
-    start_range  = (staal_datum - timedelta(days=14)).strftime("%d/%m/%Y")
+    start_datum = staal_datum - timedelta(days=14)
+    if is_genius:
+        from dateutil.relativedelta import relativedelta
+        start_datum -= relativedelta(months=1)
+
+    start_range  = start_datum.strftime("%d/%m/%Y")
     end_range    = (staal_datum + timedelta(days=14)).strftime("%d/%m/%Y")
 
     log(f"Stap 1: Navigeren naar WO-zoekscherm")
-    log(f"Stap 1: T-nummer={maximo}, zoekvenster={start_range} → {end_range}")
+    log(f"Stap 1: T-nummer={maximo}, zoekvenster={start_range} → {end_range}"
+        + (" (Genius: ondergrens +1 maand verbreed)" if is_genius else ""))
 
     try:
         await page.goto(WO_ZOEK_URL, wait_until="domcontentloaded", timeout=30_000)
