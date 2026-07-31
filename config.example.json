@@ -1,0 +1,45 @@
+{
+  "modus": "volledig",
+  "ps_base_url": "https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD/",
+  "ps_psc_url": "https://peoplesoftlogistiek.uz.kuleuven.ac.be/psc/FS9PROD/",
+  "username": "VUL_JE_PEOPLESOFT_GEBRUIKERSNAAM_IN",
+  "vakgroep": "VUL_VAKGROEPCODE_IN",
+  "refresh_interval_minutes": 5,
+  "active_hours_start": "06:30",
+  "active_hours_end": "17:00",
+  "server_host": "0.0.0.0",
+  "server_port": 5000,
+  "ps_base_url_td": "https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD/",
+  "app_log_retentie_dagen": 5,
+  "ccs_maximo": "VUL_T-NUMMER_IN",
+  "matrix_url":  "MATRIX_URL",
+  "matrix_token": "TOKEN",
+  "matrix_room": "ROOM",
+  "werkuren_users": [
+    {
+      "oprid": "VOORBEELD_OPRID",
+      "naam": "VOORBEELD NAAM"
+    }
+  ],
+  "ro_logs": {
+    "VOORBEELD RO": "Z:\\pad\\naar\\RO_data.txt"
+  },
+  "hr_logs": {
+    "VOORBEELD HR": "Z:\\pad\\naar\\HR_data.txt"
+  },
+  "ccs_log": "Z:\\pad\\naar\\CCS_data.txt",
+  "ccs_vaten": {
+    "container 1.1": {
+      "type": "VOORBEELD",
+      "bestelnummer": "000000"
+    }
+  },
+  "matrix_url": "https://jouw-matrix-server",
+  "matrix_token": "VUL_MATRIX_TOKEN_IN",
+  "matrix_room": "!jouw-room-id:jouw-matrix-server",
+  "onedrive_sync": {
+    "enabled": false,
+    "pad": "C:\\Users\\jouw_naam\\OneDrive - UZ Leuven\\werkorder-dashboard",
+    "sync_config": false
+  }
+}

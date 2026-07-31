@@ -2,6 +2,8 @@
    Gedeelde menu-balk (top-nav), gebaseerd op dashboard.html.
    Gebruik: zet bovenaan de pagina  {% set actieve_pagina = 'xxx' %}
    en include dit bestand in header-right:  {% include "_nav.html" %}
+   In 'beperkt' pakket (app_modus, zie context_processor in app.py) worden
+   enkel Service Rapporten en Snelle Werkorder getoond.
    ────────────────────────────────────────────────────────────────────────── #}
 {% set nav_links = [
   ('/',                    '🏠 DASHBOARD',        'dashboard'),
@@ -12,7 +14,9 @@
   ('/toestel-werkorder',   '⚡ SNELLE WERKORDER',  'toestel-werkorder'),
   ('/logs',                '📄 LOGS',             'logs'),
 ] %}
+{% set beperkte_pagina_keys = ['service-rapporten', 'toestel-werkorder'] %}
 {% for href, label, key in nav_links %}
+{% if app_modus != 'beperkt' or key in beperkte_pagina_keys %}
 <a href="{{ href }}"
    {% if actieve_pagina == key %}
    style="font-family:var(--mono);font-size:12px;color:var(--accent);text-decoration:none;border:1px solid var(--accent);padding:7px 14px;border-radius:3px;letter-spacing:.5px;transition:all .15s;background:rgba(26,107,221,.08)"
@@ -20,4 +24,5 @@
    style="font-family:var(--mono);font-size:12px;color:var(--muted);text-decoration:none;border:1px solid var(--border);padding:7px 14px;border-radius:3px;letter-spacing:.5px;transition:all .15s"
    onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'"
    {% endif %}>{{ label }}</a>
+{% endif %}
 {% endfor %}

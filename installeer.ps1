@@ -22,7 +22,7 @@ Write-Host "  |       WERKORDER DASHBOARD - INSTALLATIE              |" -Foregro
 Write-Host "  +------------------------------------------------------+" -ForegroundColor White
 
 # - Stap 1: Python controleren / installeren --------
-Schrijf-Stap "1/5" "Python controleren..."
+Schrijf-Stap "1/6" "Python controleren..."
 $pythonOk = $false
 try {
     $pyVer = python --version 2>&1
@@ -52,12 +52,12 @@ if (-not $pythonOk) {
 }
 
 # - Stap 2: pip updaten ---------------------
-Schrijf-Stap "2/5" "pip updaten..."
+Schrijf-Stap "2/6" "pip updaten..."
 python -m pip install --upgrade pip --quiet
 Schrijf-Ok "pip up-to-date"
 
 # - Stap 3: Python packages installeren -------------
-Schrijf-Stap "3/5" "Python packages installeren..."
+Schrijf-Stap "3/6" "Python packages installeren..."
 
 $packages = @(
     @{ name = "flask";      pip = "flask>=3.0" },
@@ -79,7 +79,7 @@ foreach ($pkg in $packages) {
 }
 
 # - Stap 4: Playwright Edge installeren -------------
-Schrijf-Stap "4/5" "Playwright browser installeren (Microsoft Edge)..."
+Schrijf-Stap "4/6" "Playwright browser installeren (Microsoft Edge)..."
 Schrijf-Info "Dit kan enkele minuten duren..."
 try {
     python -m playwright install msedge
@@ -92,7 +92,7 @@ try {
 }
 
 # - Stap 4b: Playwright Chromium installeren -------------
-Schrijf-Stap "4/5" "Playwright browser installeren (Chromium)..."
+Schrijf-Stap "4/6" "Playwright browser installeren (Chromium)..."
 Schrijf-Info "Dit kan enkele minuten duren..."
 try {
     python -m playwright install chromium
@@ -104,8 +104,8 @@ try {
     exit 1
 }
 
-# - Stap 5: Snelkoppeling op bureaublad -------------
-Schrijf-Stap "5/5" "Snelkoppeling aanmaken op bureaublad..."
+# - Stap 5: Configuratie + pakketkeuze -------------
+Schrijf-Stap "5/6" "Configuratie instellen..."
 
 # Werkt zowel via .\installeer.ps1 als via Invoke-Expression
 if ($MyInvocation.MyCommand.Path) {
@@ -113,6 +113,52 @@ if ($MyInvocation.MyCommand.Path) {
 } else {
     $scriptDir = (Get-Location).Path
 }
+
+$configPath  = Join-Path $scriptDir "config.json"
+$examplePath = Join-Path $scriptDir "config.example.json"
+
+if (-not (Test-Path $configPath)) {
+    if (Test-Path $examplePath) {
+        Copy-Item $examplePath $configPath
+        Schrijf-Ok "config.json aangemaakt vanuit config.example.json"
+        Schrijf-Info "Vul nadien nog je PeopleSoft-gebruikersnaam in via het dashboard (Inloggen)."
+    } else {
+        Schrijf-Fout "config.example.json niet gevonden - config.json moet je zelf aanmaken."
+    }
+}
+
+if (Test-Path $configPath) {
+    Write-Host ""
+    Write-Host "  Welk pakket wil je installeren?" -ForegroundColor Yellow
+    Write-Host "    1) Volledig pakket  - dashboard, thuisdialyse, RO-staalname, staalresultaten,"
+    Write-Host "                          service rapporten, snelle werkorder (met achtergrond-scraper)"
+    Write-Host "    2) Beperkt pakket   - enkel Service Rapporten + Snelle Werkorder"
+    Write-Host "                          (geen achtergrond-scraper, geen OneDrive-sync)"
+    $keuze = Read-Host "  Keuze (1 of 2, Enter = 1)"
+
+    $modus = "volledig"
+    if ($keuze -eq "2") { $modus = "beperkt" }
+
+    try {
+        $cfg = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $cfg | Add-Member -NotePropertyName "modus" -NotePropertyValue $modus -Force
+        $jsonTekst = $cfg | ConvertTo-Json -Depth 10
+        # BELANGRIJK: geen 'Set-Content -Encoding UTF8', want dat schrijft een
+        # BOM (byte-order-mark) aan het begin van het bestand. Python leest
+        # config.json met open() zonder expliciete encoding, en breekt dan op
+        # die onzichtbare BOM ("Expecting value"-fout bij json.load). Daarom
+        # hier expliciet UTF8Encoding($false) = UTF-8 zonder BOM.
+        $utf8ZonderBom = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($configPath, $jsonTekst, $utf8ZonderBom)
+        Schrijf-Ok "Pakket ingesteld op '$modus' in config.json"
+    } catch {
+        Schrijf-Fout "Kon 'modus' niet wegschrijven naar config.json: $_"
+        Schrijf-Info "Zet dit veld dan zelf handmatig: `"modus`": `"$modus`""
+    }
+}
+
+# - Stap 6: Snelkoppeling op bureaublad -------------
+Schrijf-Stap "6/6" "Snelkoppeling aanmaken op bureaublad..."
 
 $startScript = Join-Path $scriptDir "app.py"
 $desktop     = [Environment]::GetFolderPath("Desktop")

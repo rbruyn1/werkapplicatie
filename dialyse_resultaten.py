@@ -511,8 +511,10 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
     # Voor Genius-toestellen komen de resultaten via een geautomatiseerd
     # systeem in PeopleSoft binnen, met meer vertraging dan bij andere
     # toestellen — de ondergrens van het venster gaat voor Genius daarom
-    # een extra kalendermaand verder terug, anders wordt de WO soms niet
-    # gevonden.
+    # 2 extra kalendermaanden verder terug (ruime marge: bij dit type
+    # toestel wordt maar om de ~8 maanden een staal genomen, dus geen
+    # risico op overlap met een vorige staalname; extra buffer voor het
+    # geval de aanmaaklimiet in PeopleSoft een keer net gehaald wordt).
     is_genius = staal.get("eenheid", "").strip().lower().startswith("genius")
 
     try:
@@ -538,14 +540,14 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
     start_datum = staal_datum - timedelta(days=14)
     if is_genius:
         from dateutil.relativedelta import relativedelta
-        start_datum -= relativedelta(months=1)
+        start_datum -= relativedelta(months=2)
 
     start_range  = start_datum.strftime("%d/%m/%Y")
     end_range    = (staal_datum + timedelta(days=14)).strftime("%d/%m/%Y")
 
     log(f"Stap 1: Navigeren naar WO-zoekscherm")
     log(f"Stap 1: T-nummer={maximo}, zoekvenster={start_range} → {end_range}"
-        + (" (Genius: ondergrens +1 maand verbreed)" if is_genius else ""))
+        + (" (Genius: ondergrens +2 maanden verbreed)" if is_genius else ""))
 
     try:
         await page.goto(WO_ZOEK_URL, wait_until="domcontentloaded", timeout=30_000)
