@@ -18,41 +18,49 @@ Alle pagina's delen dezelfde menubalk (`templates/_nav.html`).
 
 ## Eénmalige installatie
 
-### 1. Python installeren
-Download Python 3.11 of nieuwer via https://www.python.org/downloads/
-Zorg dat je bij de installatie "Add Python to PATH" aanvinkt.
-
-### 2. Bestanden neerzetten
-Zet alle bestanden in één map, bijv. `C:\Werkorder-Dashboard\`
-
-### 3. Pakketten installeren
-Open een opdrachtprompt (cmd) in die map en voer uit:
-
+### 1. Bestanden ophalen
+Clone deze repo (aanbevolen — updates ophalen wordt dan gewoon `git pull`):
 ```
-pip install -r requirements.txt
-playwright install chromium
+git clone <repo-url> C:\Werkorder-Dashboard
 ```
+Of zet alle bestanden handmatig in één map, bijv. `C:\Werkorder-Dashboard\`.
 
-> `playwright install chromium` downloadt een eigen browser (~150MB).
-> Dit hoeft maar **één keer**. Daarna nooit meer driver-updates!
+### 2. `installeer.ps1` uitvoeren
+Rechtsklik op `installeer.ps1` → **"Uitvoeren met PowerShell"** (of `.\installeer.ps1`
+in een PowerShell-venster in die map). Dit doet **alles** in één keer, geen losse
+stappen meer nodig:
 
-### 4. Inloggegevens instellen
-Open `config.json` en vul in:
-```json
-{
-  "username": "jouw_username",
-  "password": "jouw_wachtwoord",
-  ...
-}
-```
-Het wachtwoord wordt versleuteld opgeslagen (`crypto_utils.py`, veld `password_enc`).
-`config.json` en het bijhorende `secret.key` bevatten/ontsluiten gevoelige gegevens en
-horen niet gedeeld of gecommit te worden.
+1. **Python controleren/installeren** — is Python al aanwezig, dan gaat het script
+   gewoon verder; ontbreekt het, dan wordt Python automatisch geïnstalleerd via
+   `winget` (geen handmatige download/installatie meer nodig).
+2. pip bijwerken
+3. Python-pakketten installeren (`flask`, `playwright`, `openpyxl`, `watchdog`,
+   `cryptography`, ...)
+4. Playwright-browsers installeren (Microsoft Edge + Chromium — dit hoeft maar
+   **één keer**, nadien nooit meer driver-updates)
+5. **Configuratie instellen** — maakt `config.json` aan vanuit `config.example.json`
+   (als het nog niet bestaat) en vraagt interactief welk pakket je wil installeren
+   (Volledig of Beperkt — zie "Beperkt pakket" verderop)
+6. Snelkoppeling aanmaken op het bureaublad
+
+### 3. Inloggegevens instellen
+Start de app (zie "Starten" hieronder) en klik op de aanmeld-badge rechtsboven in
+het dashboard. Vul je PeopleSoft-gebruikersnaam en -wachtwoord in — dat gebeurt
+via de app zelf, **niet** door `config.json` handmatig te bewerken. Het wachtwoord
+wordt daarbij versleuteld opgeslagen (`crypto_utils.py`, veld `password_enc` in
+`config.json`).
+
+`config.json` en het bijhorende `secret.key` bevatten/ontsluiten gevoelige gegevens
+en horen niet gedeeld of gecommit te worden (staan al in `.gitignore`).
 
 ---
 
 ## Starten
 
+Na de installatie: dubbelklik de snelkoppeling **"Werkorder Dashboard"** op je
+bureaublad.
+
+Handmatig kan ook, vanuit de map:
 ```
 python start.py
 ```
