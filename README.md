@@ -161,7 +161,12 @@ wil aanmaken, heeft de rest van de app (dashboard, thuisdialyse, RO-staalname,
 staalresultaten, logs) niet nodig — en dus ook geen draaiende
 PeopleSoft-scraper of OneDrive-sync.
 
-Zet in `config.json` van die installatie:
+**Bij installatie**: `installeer.ps1` vraagt in stap 5/6 welk pakket je wil
+("1) Volledig" of "2) Beperkt") en maakt `config.json` aan (vanuit
+`config.example.json`, als dat bestand nog niet bestaat) met het juiste
+`modus`-veld erin.
+
+Achteraf omschakelen kan ook, gewoon in `config.json` van die installatie:
 ```json
 "modus": "beperkt"
 ```
