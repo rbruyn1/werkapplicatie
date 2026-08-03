@@ -137,6 +137,25 @@ Buiten die uren slaapt de scraper maar blijft het dashboard bereikbaar.
 In het dashboard staat een "↻ VERNIEUWEN"-knop om op elk moment handmatig een nieuwe
 scrape te starten.
 
+## Bijwerken vanuit de app (geen `start.py` nodig)
+Elke pagina controleert op de achtergrond (elke 15 minuten) of er een nieuwe versie
+op GitHub staat. Is dat zo, dan verschijnt rechtsboven een badge **"🔄 Update
+beschikbaar"**.
+
+Klik erop → een popup vraagt bevestiging → pas dan gebeurt er iets: `git pull` +
+de app herstart zichzelf (`os.execv`, dezelfde manier van opstarten als daarvoor
+blijft behouden — `start.py` blijft `start.py`, een snelkoppeling naar `app.py`
+blijft `app.py`). De pagina herlaadt zelf zodra de app terug online is.
+
+Dit gebeurt **nooit automatisch** — enkel na een expliciete klik + bevestiging,
+net om te vermijden dat een update ongevraagd tussenkomt terwijl iemand midden in
+een actie zit (het probleem met `start.py`'s bestandswatcher-herstart).
+
+Draaien meerdere pc's tegelijk vanaf dezelfde gedeelde `Z:`-map? Een korte
+(30 seconden) lock voorkomt dat twee pc's tegelijk `git pull` doen — klikt iemand
+anders net tegelijk, dan krijg je een duidelijke melding om het even opnieuw te
+proberen.
+
 ## OneDrive-sync (draaien op een pc buiten het netwerk)
 Als meerdere pc's op kantoor vanaf dezelfde gedeelde map draaien (bv.
 `Z:\APPLICATIE WO\werkorder-dashboard`), is er telkens één **scraper-master**

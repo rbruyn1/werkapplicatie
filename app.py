@@ -189,6 +189,7 @@ app.config["TEMPLATES_AUTO_RELOAD"] = True
 DATA_PATH   = Path(__file__).parent / "data.json"
 CONFIG_PATH = Path(__file__).parent / "config.json"
 LOCK_PATH   = Path(__file__).parent / "scraper.lock"
+UPDATE_LOCK_PATH = Path(__file__).parent / "update.lock"
 TD_PATH     = Path(__file__).parent / "thuisdialyse.json"
 RO_PATH     = Path(__file__).parent / "ro_staalname.json"
 DR_PATH     = Path(__file__).parent / "dialyse_resultaten_data.json"
@@ -391,6 +392,111 @@ def api_herstart():
     start_background_scraper()
     log.info("Scraper herstart via dashboard-knop")
     return jsonify({"ok": True, "bericht": "Scraper hergestart — config.json herladen"})
+
+
+# ── Update vanaf GitHub: check + ophalen + herstart, vanuit de app zelf ────────
+# Alternatief voor start.py's bestandswatcher, die soms hinderlijk herstart
+# terwijl er net een PeopleSoft-actie loopt. Hier gebeurt niets automatisch:
+# controleren mag periodiek (de frontend pollt zelf), maar effectief ophalen
+# + herstarten gebeurt enkel na een expliciete klik + bevestiging.
+
+def _git_pad():
+    return str(Path(__file__).parent)
+
+
+def _git_commit(ref):
+    try:
+        r = subprocess.run(["git", "rev-parse", ref], cwd=_git_pad(),
+                            capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else None
+    except Exception:
+        return None
+
+
+@app.route("/api/update-check")
+def api_update_check():
+    """Doet een 'git fetch' (raakt de working tree niet aan) en vergelijkt de
+    lokale HEAD met origin/main. Veilig om vanuit meerdere pc's tegelijk
+    (elk met hun eigen proces op de gedeelde Z:-map) te pollen."""
+    lokaal = _git_commit("HEAD")
+    try:
+        subprocess.run(["git", "fetch", "origin", "--quiet"], cwd=_git_pad(),
+                        capture_output=True, text=True, timeout=20)
+    except Exception as e:
+        return jsonify({"ok": False, "fout": f"git fetch mislukt: {e}"})
+    nieuwste = _git_commit("origin/main")
+
+    if lokaal is None or nieuwste is None:
+        return jsonify({"ok": False, "fout": "Kon git-status niet bepalen "
+                                              "(geen git-repo, of git niet gevonden)."})
+    return jsonify({
+        "ok": True,
+        "update_beschikbaar": lokaal != nieuwste,
+        "huidig": lokaal[:7],
+        "nieuwste": nieuwste[:7],
+    })
+
+
+def _herstart_zelf():
+    """Vervangt het huidige Python-proces door een verse start met dezelfde
+    argumenten (dus 'python start.py' blijft 'python start.py', 'python
+    app.py' blijft 'python app.py') - zo laadt de nieuwe code effectief,
+    zonder dat iemand het venster zelf moet sluiten en heropenen."""
+    try:
+        verwijder_lock()
+    except Exception:
+        pass
+    log.info("Herstart nu na update (os.execv)...")
+    python = sys.executable
+    os.execv(python, [python] + sys.argv)
+
+
+@app.route("/api/update-nu", methods=["POST"])
+def api_update_nu():
+    """Haalt de update op (git pull) en herstart het proces. Enkel via een
+    expliciete gebruikersactie - nooit automatisch getriggerd."""
+    hostname = socket.gethostname()
+
+    # Simpele, kortlevende lock om te vermijden dat twee pc's op dezelfde
+    # gedeelde Z:-map tegelijk 'git pull' doen (kan tot een git-lockconflict
+    # leiden). Een lock ouder dan 30s wordt genegeerd - beschermt tegen een
+    # vastgelopen/gecrashte poging die de lock nooit opruimde.
+    if UPDATE_LOCK_PATH.exists():
+        try:
+            lock = json.loads(UPDATE_LOCK_PATH.read_text())
+            leeftijd = __import__("time").time() - lock.get("tijd", 0)
+            if leeftijd < 30 and lock.get("host") != hostname:
+                return jsonify({"ok": False,
+                                 "fout": f"{lock.get('host')} is net aan het bijwerken — "
+                                         f"probeer over een halve minuut opnieuw."}), 409
+        except Exception:
+            pass
+    UPDATE_LOCK_PATH.write_text(json.dumps({"host": hostname, "tijd": __import__("time").time()}))
+
+    try:
+        r = subprocess.run(["git", "pull", "origin", "main"], cwd=_git_pad(),
+                            capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        try:
+            UPDATE_LOCK_PATH.unlink()
+        except Exception:
+            pass
+        return jsonify({"ok": False, "fout": f"git pull mislukt: {e}"}), 500
+
+    try:
+        UPDATE_LOCK_PATH.unlink()
+    except Exception:
+        pass
+
+    if r.returncode != 0:
+        return jsonify({"ok": False, "fout": f"git pull gaf een fout terug: {r.stderr[-500:]}"}), 500
+
+    log.info(f"Update opgehaald door {hostname}: {r.stdout.strip()}")
+    # Herstart pas een fractie NA het versturen van deze response, anders
+    # krijgt de browser geen bevestiging meer te zien (verbinding valt weg
+    # zodra os.execv het huidige proces vervangt).
+    threading.Timer(1.0, _herstart_zelf).start()
+    return jsonify({"ok": True, "bericht": "Update opgehaald — app herstart nu..."})
 
 
 @app.route("/api/login", methods=["POST"])
