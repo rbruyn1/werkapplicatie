@@ -11,8 +11,9 @@ Flow:
   5. Omschrijving (probleemmelding, max 50 tekens) invullen
   6. Uitvoerder = rbruyn1
   7. Eerste opslaan → INUITV
-  8. Rapportage-tab → oplossing aanvinken → commentaar invullen → uren → status UITGEV
-  9. Definitief opslaan → verificatie UITGEV
+  8. Rapportage-tab → oplossing aanvinken → commentaar invullen → uren
+  9. Indien zet_uitgev=True (standaard): status instellen op UITGEV
+ 10. Definitief opslaan (altijd - bewaart o.a. oplossing-vinkje en uren) → verificatie eindstatus
 
 Beschikbaar voor alle gebruikers.
 """
@@ -240,7 +241,7 @@ async def zoek_tnummer_via_verkortingsnummer(verkortingsnummer: str, stap_log=No
 
 async def maak_toestel_werkorder(t_nummer: str, probleemmelding: str,
                                   oplossing: str, uren: str,
-                                  stap_log=None) -> dict:
+                                  stap_log=None, zet_uitgev: bool = True) -> dict:
     """
     Maak een snelle WO aan voor een toestel (geen wisselstukken).
 
@@ -250,6 +251,9 @@ async def maak_toestel_werkorder(t_nummer: str, probleemmelding: str,
         oplossing       : Vrije tekst voor rapportage-commentaar
         uren            : Aantal uren als string (bv. '1', '1.5', '2u30')
         stap_log        : Optionele callback voor live logging naar de UI
+        zet_uitgev      : als True (standaard) wordt de status na afloop op
+                          'UITGEV' gezet. Als False blijft de WO op 'INUITV'
+                          staan (status wordt niet gewijzigd).
     """
     log_lijnen = []
 
@@ -486,22 +490,28 @@ async def maak_toestel_werkorder(t_nummer: str, probleemmelding: str,
             await asyncio.sleep(1)
             log("Stap 12: ✓ Werkuren ingevuld")
 
-            # ── 13. Status → UITGEV ────────────────────────────────────────
-            log("Stap 13: Status instellen op UITGEV...")
-            try:
-                await tc.wait_for_selector('[id="UZFM_WO_WRK_UZ_WO_STAT_WZ_TECH$70$"]',
-                                           state="visible", timeout=10_000)
-                await tc.select_option('[id="UZFM_WO_WRK_UZ_WO_STAT_WZ_TECH$70$"]', value="UITGEV")
-                await asyncio.sleep(1)
-                log("Stap 13: ✓ Status 'UITGEV' ingesteld")
-            except Exception as e:
-                log(f"Stap 13: ⚠ Status instellen mislukt: {e}")
+            # ── 13. Status → UITGEV (enkel indien gevraagd) ─────────────────
+            if zet_uitgev:
+                log("Stap 13: Status instellen op UITGEV...")
+                try:
+                    await tc.wait_for_selector('[id="UZFM_WO_WRK_UZ_WO_STAT_WZ_TECH$70$"]',
+                                               state="visible", timeout=10_000)
+                    await tc.select_option('[id="UZFM_WO_WRK_UZ_WO_STAT_WZ_TECH$70$"]', value="UITGEV")
+                    await asyncio.sleep(1)
+                    log("Stap 13: ✓ Status 'UITGEV' ingesteld")
+                except Exception as e:
+                    log(f"Stap 13: ⚠ Status instellen mislukt: {e}")
+            else:
+                log("Stap 13: Overgeslagen — status blijft op 'INUITV' staan")
 
-            # ── 14. Definitief opslaan ─────────────────────────────────────
+            # ── 14. Definitief opslaan (altijd nodig: bewaart o.a. het
+            #        oplossing-vinkje uit stap 11 en de uren uit stap 12,
+            #        ongeacht de statuskeuze) ─────────────────────────────
             log("Stap 14: Definitief opslaan...")
             await page.click('[id="#ICSave"]')
             await asyncio.sleep(2)
 
+            verwachte_status = "UITGEV" if zet_uitgev else "INUITV"
             eindstatus = ""
             for poging in range(15):
                 await asyncio.sleep(2)
@@ -509,19 +519,19 @@ async def maak_toestel_werkorder(t_nummer: str, probleemmelding: str,
                     eindstatus = (await page.locator("#UZFM_WO_UZ_WO_STATUS")
                                   .inner_text(timeout=5_000)).strip()
                     log(f"Stap 14: Status = '{eindstatus}' (poging {poging+1})")
-                    if eindstatus == "UITGEV":
-                        log("Stap 14: ✓ Eindstatus UITGEV bevestigd")
+                    if eindstatus == verwachte_status:
+                        log(f"Stap 14: ✓ Eindstatus {verwachte_status} bevestigd")
                         break
                 except Exception as e:
                     log(f"Stap 14: Status niet leesbaar: {e}")
 
             await browser.close()
 
-            resultaat["ok"]       = eindstatus == "UITGEV"
+            resultaat["ok"]       = eindstatus == verwachte_status
             resultaat["wo_id"]    = wo_id
             resultaat["status"]   = eindstatus
             if not resultaat["ok"]:
-                resultaat["fout"] = f"Eindstatus was '{eindstatus}', verwacht 'UITGEV'"
+                resultaat["fout"] = f"Eindstatus was '{eindstatus}', verwacht '{verwachte_status}'"
             log(f"{'✓' if resultaat['ok'] else '❌'} WO {wo_id} — eindstatus: '{eindstatus}'")
 
     except Exception as e:
@@ -559,9 +569,9 @@ def zoek_tnummer(verkortingsnummer: str, stap_log=None) -> dict:
 
 
 def maak_wo(t_nummer: str, probleemmelding: str, oplossing: str,
-            uren: str, stap_log=None) -> dict:
+            uren: str, stap_log=None, zet_uitgev: bool = True) -> dict:
     return asyncio.run(maak_toestel_werkorder(
-        t_nummer, probleemmelding, oplossing, uren, stap_log))
+        t_nummer, probleemmelding, oplossing, uren, stap_log, zet_uitgev=zet_uitgev))
 
 
 # ── Log van aangemaakte snelle werkorders ────────────────────────────────────

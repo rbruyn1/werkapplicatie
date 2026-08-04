@@ -1936,6 +1936,7 @@ def api_tw_maak_wo():
     probleemmelding = (payload.get("probleemmelding") or "").strip()
     oplossing       = (payload.get("oplossing") or "").strip()
     uren            = (payload.get("uren") or "").strip()
+    zet_uitgev      = bool(payload.get("zet_uitgev", True))
 
     if not (t_nummer and probleemmelding and oplossing and uren):
         return jsonify({"ok": False,
@@ -1959,7 +1960,7 @@ def api_tw_maak_wo():
     def _run():
         from wo_toestel_werkorder import maak_wo, tw_log_toevoegen
         try:
-            res = maak_wo(t_nummer, probleemmelding, oplossing, uren, stap_log=_stap_log)
+            res = maak_wo(t_nummer, probleemmelding, oplossing, uren, stap_log=_stap_log, zet_uitgev=zet_uitgev)
             job["ok"]    = res.get("ok", False)
             job["wo_id"] = res.get("wo_id")
             if not res.get("ok"):
@@ -1984,6 +1985,7 @@ def api_tw_direct():
     probleemmelding   = (payload.get("probleemmelding") or "").strip()
     oplossing         = (payload.get("oplossing") or "").strip()
     uren              = (payload.get("uren") or "").strip()
+    zet_uitgev        = bool(payload.get("zet_uitgev", True))
 
     if not (verkortingsnummer and probleemmelding and oplossing and uren):
         return jsonify({"ok": False,
@@ -2017,7 +2019,7 @@ def api_tw_direct():
             job["t_nummer"] = t_nummer  # frontend kan dit tonen terwijl WO loopt
 
             # Stap 2: WO aanmaken
-            res = maak_wo(t_nummer, probleemmelding, oplossing, uren, stap_log=_stap_log)
+            res = maak_wo(t_nummer, probleemmelding, oplossing, uren, stap_log=_stap_log, zet_uitgev=zet_uitgev)
             job["ok"]    = res.get("ok", False)
             job["wo_id"] = res.get("wo_id")
             if not res.get("ok"):

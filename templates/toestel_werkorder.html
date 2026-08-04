@@ -182,6 +182,11 @@
 
     #toegang-geblokkeerd { text-align: center; padding: 40px 20px; color: #888; }
     #toegang-geblokkeerd h2 { color: #c0392b; margin-bottom: 10px; }
+
+    .radio-toggle { display: flex; gap: 16px; font-family: var(--mono); font-size: 13px; }
+    .radio-toggle label { display: flex; align-items: center; gap: 5px; cursor: pointer; color: var(--muted); }
+    .radio-toggle input[type="radio"] { accent-color: var(--accent); cursor: pointer; margin: 0; }
+    .radio-toggle label:has(input:checked) { color: var(--text); font-weight: 700; }
   </style>
 </head>
 <body>
@@ -239,6 +244,15 @@
            style="max-width:180px" autocomplete="off">
   </div>
 
+  <!-- Status na aanmaken -->
+  <div class="form-group">
+    <label>Status na aanmaken</label>
+    <div class="radio-toggle">
+      <label><input type="radio" name="tw-status" checked onchange="twZetUitgev=true">UITGEV</label>
+      <label><input type="radio" name="tw-status" onchange="twZetUitgev=false">INUITV</label>
+    </div>
+  </div>
+
   <!-- Knoppen -->
   <div class="knop-groep">
     <button class="btn btn-submit" id="btn-submit" onclick="maakWO()" disabled
@@ -283,6 +297,7 @@
 <script>
   let tNummer = "";
   let jobId = null;
+  let twZetUitgev = true; // standaard UITGEV, zoals bij Service Rapporten
   let pollTimer = null;
 
   // ── Klok ──
@@ -392,7 +407,7 @@
       const r = await fetch("/api/toestel-werkorder/maak-wo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ t_nummer: tNummer, probleemmelding, oplossing, uren })
+        body: JSON.stringify({ t_nummer: tNummer, probleemmelding, oplossing, uren, zet_uitgev: twZetUitgev })
       });
       const data = await r.json();
       jobId = data.job_id;
@@ -433,7 +448,7 @@
       const r = await fetch("/api/toestel-werkorder/direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verkortingsnummer: verk, probleemmelding, oplossing, uren })
+        body: JSON.stringify({ verkortingsnummer: verk, probleemmelding, oplossing, uren, zet_uitgev: twZetUitgev })
       });
       const data = await r.json();
       jobId = data.job_id;
@@ -511,8 +526,9 @@
     const url = woId
       ? `https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD_1/EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL?Page=UZFM_WO_ALG&Action=U&BUSINESS_UNIT=POUZL&UZ_WO_ID=${woId}&TargetFrameName=None`
       : "#";
+    const statusTekst = twZetUitgev ? "UITGEV" : "INUITV";
     el.innerHTML = `
-      <span class="wo-link">✓ Werkorder aangemaakt</span>
+      <span class="wo-link">✓ Werkorder aangemaakt — status: ${statusTekst}</span>
       ${woId ? `<a href="${url}" target="_blank">WO ${woId} openen in PeopleSoft →</a>` : ""}
     `;
     laadTwLog();
