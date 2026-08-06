@@ -129,7 +129,25 @@ def _lees_log_retentie_dagen(standaard: int = 5) -> int:
 _LOG_DIR = Path(__file__).parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
 from logging.handlers import TimedRotatingFileHandler
-_file_handler = TimedRotatingFileHandler(
+
+
+class _StilleRotatie(TimedRotatingFileHandler):
+    """Als de dagelijkse rotatie (hernoemen naar app.log.YYYY-MM-DD) even
+    faalt omdat het bestand op dat moment nog door een ander proces
+    vastgehouden wordt (bv. de live-logweergave in het dashboard, of een
+    antivirusscan), log dan één duidelijke waarschuwing i.p.v. bij elke
+    volgende regel opnieuw een volledige traceback te spammen. De rotatie
+    wordt de volgende gelegenheid gewoon opnieuw geprobeerd."""
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except (PermissionError, OSError) as e:
+            logging.getLogger(__name__).warning(
+                f"Logrotatie overgeslagen (bestand tijdelijk vergrendeld?): {e}"
+            )
+
+
+_file_handler = _StilleRotatie(
     _LOG_DIR / "app.log", when="midnight",
     backupCount=_lees_log_retentie_dagen(), encoding="utf-8"
 )
