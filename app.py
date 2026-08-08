@@ -135,16 +135,39 @@ class _StilleRotatie(TimedRotatingFileHandler):
     """Als de dagelijkse rotatie (hernoemen naar app.log.YYYY-MM-DD) even
     faalt omdat het bestand op dat moment nog door een ander proces
     vastgehouden wordt (bv. de live-logweergave in het dashboard, of een
-    antivirusscan), log dan één duidelijke waarschuwing i.p.v. bij elke
-    volgende regel opnieuw een volledige traceback te spammen. De rotatie
-    wordt de volgende gelegenheid gewoon opnieuw geprobeerd."""
+    antivirusscan), meld dat dan éénmalig i.p.v. bij elke volgende regel
+    opnieuw een volledige traceback te spammen. De rotatie wordt de
+    volgende geplande gelegenheid gewoon opnieuw geprobeerd.
+
+    LET OP - twee valkuilen die hier bewust vermeden worden (een eerdere
+    versie liep hier tegenaan en veroorzaakte in één dag een logbestand
+    van 1GB):
+    1. Nooit via het logging-systeem zelf melden (logging.warning(),
+       log.error(), ...) binnen deze except-tak: die roept opnieuw DEZE
+       handler aan (aangesloten op de root-logger), wat een oneindige
+       recursielus geeft. Enkel rechtstreeks naar stderr schrijven, buiten
+       'logging' om.
+    2. self.rolloverAt bewust zelf vooruitzetten na een mislukte poging.
+       De standaardimplementatie berekent dat pas ÁCHTERAF in
+       doRollover(), na de (hier mislukkende) hernoem-stap - blijft dat
+       staan op het verstreken tijdstip, dan denkt shouldRollover() bij
+       *elke volgende regel* opnieuw dat een rotatie nodig is, en probeert
+       (en faalt, en recursie) het gewoon telkens opnieuw.
+    """
     def doRollover(self):
         try:
             super().doRollover()
         except (PermissionError, OSError) as e:
-            logging.getLogger(__name__).warning(
-                f"Logrotatie overgeslagen (bestand tijdelijk vergrendeld?): {e}"
-            )
+            import sys
+            import time
+            print(f"[logrotatie] overgeslagen, bestand tijdelijk vergrendeld: {e}",
+                  file=sys.stderr)
+            if self.stream is None:
+                try:
+                    self.stream = self._open()
+                except Exception:
+                    pass
+            self.rolloverAt = self.computeRollover(int(time.time()))
 
 
 _file_handler = _StilleRotatie(
