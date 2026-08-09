@@ -129,6 +129,25 @@ werkorder-dashboard/
 
 ---
 
+## Logging
+Het persistente logbestand (`logs/app.log`) bevat standaard enkel **WARNING en
+ERROR** — niet elke routinematige INFO-regel, om te vermijden dat het bestand
+onnodig aangroeit. Instelbaar in `config.json`:
+```json
+"log_niveau": "WARNING"
+```
+Andere waarden: `"DEBUG"`, `"INFO"`, `"ERROR"`. Dit heeft geen invloed op de
+live voortgangsweergave tijdens een WO-actie (bv. de stap-voor-stap-log bij
+Service Rapporten/Snelle Werkorder) — dat loopt via een apart mechanisme.
+
+`debug_modus` (standaard `false`) schakelt Flask's interactieve debugger uit.
+Enkel aanzetten voor lokaal ontwikkelen/foutopsporing, nooit permanent, want
+de debugger laat via de browser willekeurige Python-code uitvoeren bij een
+onverwerkte fout:
+```json
+"debug_modus": false
+```
+
 ## Actieve uren
 De scraper haalt enkel werkorders op tussen 06:30 en 17:00 (instelbaar in `config.json`).
 Buiten die uren slaapt de scraper maar blijft het dashboard bereikbaar.

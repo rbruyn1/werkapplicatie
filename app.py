@@ -126,6 +126,30 @@ def _lees_log_retentie_dagen(standaard: int = 5) -> int:
     except Exception:
         return standaard
 
+
+def _lees_log_niveau(standaard: str = "WARNING") -> int:
+    """Niveau voor het PERSISTENTE logbestand (app.log) - los van wat er in
+    een draaiende terminal te zien is. Standaard enkel WARNING/ERROR, zodat
+    het bestand niet blijft aangroeien met routinematige INFO-regels. Live
+    voortgang tijdens een WO-actie (Playwright-stappen e.d.) loopt via een
+    apart, in-memory mechanisme (stap_log/job['stap_logs']) en wordt door
+    dit niveau niet beïnvloed. Instelbaar via config.json, veld
+    'log_niveau': "DEBUG"/"INFO"/"WARNING"/"ERROR"."""
+    try:
+        with open(Path(__file__).parent / "config.json", encoding="utf-8") as f:
+            naam = str(json.load(f).get("log_niveau", standaard)).upper()
+    except Exception:
+        naam = standaard
+    return getattr(logging, naam, logging.WARNING)
+
+
+def _lees_debug_modus(standaard: bool = False) -> bool:
+    try:
+        with open(Path(__file__).parent / "config.json", encoding="utf-8") as f:
+            return bool(json.load(f).get("debug_modus", standaard))
+    except Exception:
+        return standaard
+
 _LOG_DIR = Path(__file__).parent / "logs"
 _LOG_DIR.mkdir(exist_ok=True)
 from logging.handlers import TimedRotatingFileHandler
@@ -174,7 +198,7 @@ _file_handler = _StilleRotatie(
     _LOG_DIR / "app.log", when="midnight",
     backupCount=_lees_log_retentie_dagen(), encoding="utf-8"
 )
-_file_handler.setLevel(logging.INFO)
+_file_handler.setLevel(_lees_log_niveau())
 _file_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s"))
 class _AppLogFilter(logging.Filter):
     def filter(self, record):
@@ -3175,7 +3199,7 @@ if __name__ == "__main__":
         app.run(
             host=cfg.get("server_host", "0.0.0.0"),
             port=port,
-            debug=True,
+            debug=_lees_debug_modus(),
             use_reloader=False,
         )
     finally:

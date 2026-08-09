@@ -11,6 +11,8 @@
   "server_port": 5000,
   "ps_base_url_td": "https://peoplesoftlogistiek.uz.kuleuven.ac.be/psp/FS9PROD/",
   "app_log_retentie_dagen": 5,
+  "log_niveau": "WARNING",
+  "debug_modus": false,
   "ccs_maximo": "VUL_T-NUMMER_IN",
   "matrix_url":  "MATRIX_URL",
   "matrix_token": "TOKEN",
