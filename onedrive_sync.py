@@ -39,6 +39,7 @@ import logging
 import shutil
 import socket
 import threading
+import time
 from pathlib import Path
 
 from watchdog.observers import Observer
@@ -78,16 +79,48 @@ def _mag_gesynct_worden(pad: Path, sync_config: bool) -> bool:
     return True
 
 
+# Retry-instellingen voor de rename-stap: OneDrive houdt het doelbestand
+# soms heel even vast (WinError 32) terwijl het aan het uploaden/indexeren
+# is. Dat is een normale, voorbijgaande botsing — geen echte fout. Pas als
+# ook de laatste poging faalt, loggen we het als ERROR.
+_KOPIEER_POGINGEN  = 4
+_KOPIEER_WACHT_SEC = 0.5
+
+
 def _kopieer(pad: Path, doel_map: Path):
     try:
         doel_map.mkdir(parents=True, exist_ok=True)
-        doel = doel_map / pad.name
-        tmp  = doel.with_name(doel.name + ".tmp")
-        shutil.copy2(pad, tmp)
-        tmp.replace(doel)                 # atomisch op de doelschijf
-        log.debug(f"OneDrive-sync: {pad.name} -> {doel}")
     except Exception as e:
-        log.error(f"OneDrive-sync: kopieren van {pad.name} mislukt: {e}")
+        log.error(f"OneDrive-sync: aanmaken van {doel_map} mislukt: {e}")
+        return
+
+    doel = doel_map / pad.name
+    tmp  = doel.with_name(doel.name + ".tmp")
+
+    for poging in range(1, _KOPIEER_POGINGEN + 1):
+        try:
+            shutil.copy2(pad, tmp)
+            tmp.replace(doel)             # atomisch op de doelschijf
+            log.debug(f"OneDrive-sync: {pad.name} -> {doel}"
+                      + (f" (na retry, poging {poging})" if poging > 1 else ""))
+            return
+        except PermissionError as e:
+            # Typisch WinError 32: OneDrive-cliënt houdt het bestand
+            # momentaan vast. Voorbijgaand — even wachten en opnieuw.
+            if poging < _KOPIEER_POGINGEN:
+                log.debug(f"OneDrive-sync: {pad.name} tijdelijk vergrendeld "
+                          f"(poging {poging}/{_KOPIEER_POGINGEN}), retry over "
+                          f"{_KOPIEER_WACHT_SEC}s: {e}")
+                time.sleep(_KOPIEER_WACHT_SEC)
+                continue
+            log.error(f"OneDrive-sync: kopieren van {pad.name} mislukt na "
+                      f"{_KOPIEER_POGINGEN} pogingen: {e}")
+            return
+        except Exception as e:
+            # Andere fouten (bv. schijf vol, pad ongeldig) zijn geen
+            # voorbijgaand lock-probleem — meteen loggen, niet retrien.
+            log.error(f"OneDrive-sync: kopieren van {pad.name} mislukt: {e}")
+            return
 
 
 class _SyncHandler(FileSystemEventHandler):
