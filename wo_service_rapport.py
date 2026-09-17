@@ -1143,13 +1143,11 @@ async def zoek_po_wo_voor_tnummer(page, t_nummer: str, stap_log=None) -> dict:
         log("Stap 1: ✓ Zoekscherm geladen")
 
         # Werktype = PO (Preventief onderhoud).
-        # LET OP: dit werkt via letter-toets-selectie in de dropdown, zoals
-        # bij het bestaande RO-staalname-zoekscherm ("k" voor Kwaliteit).
-        # Als de PeopleSoft-labeltekst voor PO niet met 'p' begint, moet
-        # deze letter aangepast worden — nog niet live getest.
+        # Dit werkt via letter-toets-selectie in de dropdown, zoals bij het
+        # bestaande RO-staalname-zoekscherm ("k" voor Kwaliteit). Live
+        # bevestigd: één druk op 'p' volstaat om PO te selecteren.
         log("Stap 2: Werktype 'p' (Preventief onderhoud) ingeven")
         await page.click("#UZFM_WO_ZK_WRK_UZ_WO_TYPE")
-        await page.keyboard.press("p")
         await page.keyboard.press("p")
         await page.click("#UZFM_WO_ZK_WRK_UZ_WO_TYPE")
         await asyncio.sleep(0.2)
