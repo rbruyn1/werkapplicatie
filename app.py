@@ -1861,7 +1861,10 @@ def api_sr_upload():
                     "firma": info.get("firma", ""),
                     "formaat": info.get("formaat", ""),
                     "datum": info.get("datum", ""),
-                    "type_verzoek": info.get("type_verzoek", ""),
+                    # Standaard altijd 'Herstelling', ongeacht wat de PDF-extractie
+                    # gokt — gebruiker moet zelf bewust 'Preventief onderhoud'
+                    # kiezen in de UI vóór de WO aangemaakt wordt.
+                    "type_verzoek": "Herstelling",
                     "uren_arbeid": info.get("uren_arbeid", ""),
                     "werkorder_nr_firma": info.get("werkorder_nr", ""),
                     "probleemmelding": info.get("omschrijving_kort", ""),

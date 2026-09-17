@@ -66,6 +66,20 @@ WO_NIEUW_URL = (
     + "EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL"
     "?BUSINESS_UNIT=POUZL&UZ_WO_ID=NEXT&PAGE=UZFM_WO_ALG"
 )
+# Zoekscherm + detailscherm — gebruikt om te controleren of er al een
+# openstaande PO-werkorder bestaat voor een T-nummer (zelfde patroon als
+# wo_ro_staalname.py / dialyse_resultaten.py).
+WO_ZOEK_URL = (
+    PS_PSC_URL.rstrip("/") + "/"
+    + "EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WO_ZK.GBL"
+    "?FolderPath=PORTAL_ROOT_OBJECT.UZFM.UZFM_WERKORDER.UZFM_WO_ZK_GBL"
+    "&IsFolder=false&PortalHostNode=ERP&NoCrumbs=yes&PortalKeyStruct=yes"
+)
+WO_DETAIL_URL = (
+    PS_PSC_URL.rstrip("/") + "/"
+    + "EMPLOYEE/ERP/c/UZFM_MENU.UZFM_WERKORDER.GBL"
+    "?BUSINESS_UNIT=POUZL&UZ_WO_ID={wo_id}&PAGE=UZFM_WO_ALG"
+)
 SR_DATA_PATH = Path(__file__).parent / "service_rapporten.json"
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
@@ -1089,6 +1103,140 @@ async def zoek_tnummer_via_ps(serienummer: str, stap_log=None) -> dict:
 
 # ── WO aanmaken voor service-rapport ─────────────────────────────────────────
 
+async def zoek_po_wo_voor_tnummer(page, t_nummer: str, stap_log=None) -> dict:
+    """
+    Zoek of er al een openstaande PO-werkorder (Preventief Onderhoud) bestaat
+    voor het gegeven T-nummer. Analoog aan zoek_wo_voor_installatie() in
+    wo_ro_staalname.py, maar dan gefilterd op werktype PO i.p.v. K (Kwaliteit).
+
+    Verwacht een reeds ingelogde 'page' (hergebruikt binnen dezelfde
+    browsersessie als maak_wo_service_rapport).
+
+    Geeft terug:
+      {"ok": bool, "wo_id": str|None, "status": str|None,
+       "geen_wo": bool, "al_inuitv": bool, "fout": str|None}
+    - geen_wo=True   → geen bruikbare bestaande WO, nieuwe mag aangemaakt worden
+    - al_inuitv=True → er is al een WO in uitvoering, NIET opnieuw aanmaken
+    - anders (wo_id gezet, geen_wo=False, al_inuitv=False) → WO in status GOED
+      gevonden, hieraan koppelen i.p.v. een nieuwe aan te maken
+    """
+    log_lijnen = []
+
+    def log(msg):
+        ts = datetime.now().strftime("%H:%M:%S")
+        regel = f"[{ts}] PO-ZOEK {t_nummer}: {msg}"
+        log_lijnen.append(regel)
+        print(regel)
+        if stap_log:
+            stap_log(msg)
+
+    if not t_nummer:
+        return {"ok": False, "wo_id": None, "status": None,
+                "geen_wo": False, "al_inuitv": False, "fout": "Geen T-nummer"}
+
+    log(f"Zoeken naar bestaande PO-werkorder voor T-nummer '{t_nummer}'...")
+
+    try:
+        log("Stap 1: Navigeren naar WO-zoekscherm")
+        await page.goto(WO_ZOEK_URL, wait_until="domcontentloaded", timeout=30_000)
+        await page.wait_for_selector("#UZFM_WO_ZK_WRK_UZ_OMSCHR254", state="visible", timeout=20_000)
+        log("Stap 1: ✓ Zoekscherm geladen")
+
+        # Werktype = PO (Preventief onderhoud).
+        # LET OP: dit werkt via letter-toets-selectie in de dropdown, zoals
+        # bij het bestaande RO-staalname-zoekscherm ("k" voor Kwaliteit).
+        # Als de PeopleSoft-labeltekst voor PO niet met 'p' begint, moet
+        # deze letter aangepast worden — nog niet live getest.
+        log("Stap 2: Werktype 'p' (Preventief onderhoud) ingeven")
+        await page.click("#UZFM_WO_ZK_WRK_UZ_WO_TYPE")
+        await page.keyboard.press("p")
+        await page.keyboard.press("p")
+        await page.click("#UZFM_WO_ZK_WRK_UZ_WO_TYPE")
+        await asyncio.sleep(0.2)
+
+        # Ook afgesloten WO's doorzoeken — nodig om reeds afgewerkte PO's
+        # te kunnen onderscheiden van een nog openstaande.
+        await page.select_option("#UZFM_WO_ZK_WRK_UZ_WO_OPEN_ZK", "")
+        await asyncio.sleep(0.2)
+
+        # T-nummer invullen — als laatste (anders resetten andere velden)
+        log(f"Stap 3: T-nummer ← '{t_nummer}'")
+        await page.click("#UZFM_WO_ZK_WRK_UZ_OBJ_ID")
+        await page.keyboard.press("Control+a")
+        await asyncio.sleep(0.2)
+        await page.type("#UZFM_WO_ZK_WRK_UZ_OBJ_ID", t_nummer, delay=80)
+        await page.keyboard.press("Tab")
+        await asyncio.sleep(0.5)
+
+        log("Stap 4: [KLIK] Zoeken")
+        await page.click("#UZFM_WO_ZK_WRK_UZ_ZOEK")
+
+        log("Stap 5: Wachten op zoekresultaten...")
+        gevonden_rijen = []
+        for poging in range(10):
+            await asyncio.sleep(3)
+            aanwezig = await page.query_selector("#UZFM_WO_ZK_UZ_OMSCHR254\\$0")
+            if aanwezig:
+                rij = 0
+                while True:
+                    cel = await page.query_selector(f"#UZFM_WO_ZK_UZ_OMSCHR254\\${rij}")
+                    if not cel:
+                        break
+                    try:
+                        rid     = (await page.locator(f"#UZ_WO_ID\\${rij}").inner_text(timeout=3_000)).strip()
+                        rstatus = (await page.locator(f"#UZFM_WO_ZK_UZ_WO_STATUS\\${rij}").inner_text(timeout=3_000)).strip()
+                        romschr = (await page.locator(f"#UZFM_WO_ZK_UZ_OMSCHR254\\${rij}").inner_text(timeout=3_000)).strip()
+                        if rid:
+                            gevonden_rijen.append({"wo_id": rid, "status": rstatus, "omschrijving": romschr})
+                            log(f"Stap 5: Rij {rij}: WO {rid} — {rstatus} — {romschr}")
+                    except Exception as e:
+                        log(f"Stap 5: Rij {rij} niet leesbaar: {e}")
+                        break
+                    rij += 1
+                break
+            log(f"Stap 5: Nog geen resultaat (poging {poging+1}/10)...")
+        else:
+            log("Stap 5: ℹ️ Geen werkorder gevonden (timeout) → nieuwe WO mag aangemaakt worden")
+            return {"ok": True, "wo_id": None, "status": None, "fout": None,
+                    "geen_wo": True, "al_inuitv": False, "log": log_lijnen}
+
+        if not gevonden_rijen:
+            log("Stap 5: ℹ️ Geen rijen gevonden → nieuwe WO mag aangemaakt worden")
+            return {"ok": True, "wo_id": None, "status": None, "fout": None,
+                    "geen_wo": True, "al_inuitv": False, "log": log_lijnen}
+
+        goed_rijen   = [r for r in gevonden_rijen if r["status"].upper() == "GOED"]
+        inuitv_rijen = [r for r in gevonden_rijen if r["status"].upper() == "INUITV"]
+
+        if goed_rijen:
+            wo = goed_rijen[0]
+            if len(goed_rijen) > 1:
+                log(f"Stap 6: ⚠ {len(goed_rijen)} GOED WO's gevonden — eerste genomen: {wo['wo_id']}")
+            else:
+                log(f"Stap 6: ✓ Bestaande PO-WO gevonden (GOED): {wo['wo_id']}")
+            return {"ok": True, "wo_id": wo["wo_id"], "status": wo["status"], "fout": None,
+                    "geen_wo": False, "al_inuitv": False, "alle_rijen": gevonden_rijen, "log": log_lijnen}
+
+        if inuitv_rijen:
+            wo = inuitv_rijen[0]
+            log(f"Stap 6: ⚠ WO {wo['wo_id']} staat al op INUITV — niet opnieuw aanmaken")
+            return {"ok": True, "wo_id": wo["wo_id"], "status": wo["status"], "fout": None,
+                    "geen_wo": False, "al_inuitv": True, "alle_rijen": gevonden_rijen, "log": log_lijnen}
+
+        log("Stap 6: Alle gevonden WO's zijn afgesloten → nieuwe WO mag aangemaakt worden")
+        return {"ok": True, "wo_id": None, "status": None, "fout": None,
+                "geen_wo": True, "al_inuitv": False, "alle_rijen": gevonden_rijen, "log": log_lijnen}
+
+    except Exception as exc:
+        import traceback
+        tb = traceback.format_exc()
+        log(f"❌ Uitzondering: {exc}")
+        for r in tb.splitlines():
+            log(f"  TRACEBACK: {r}")
+        return {"ok": False, "wo_id": None, "status": None, "fout": str(exc),
+                "geen_wo": False, "al_inuitv": False, "log": log_lijnen}
+
+
 async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bool = True) -> dict:
     """
     Maak een werkorder aan voor een service-rapport.
@@ -1174,120 +1322,170 @@ async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bo
             log("Stap 1: ✓ Ingelogd")
             await asyncio.sleep(2)
 
-            # ── 2. Navigeer naar nieuw WO ──────────────────────────────────
-            log(f"Stap 2: Navigeren naar nieuw WO: {WO_NIEUW_URL}")
-            await page.goto(WO_NIEUW_URL, wait_until="domcontentloaded", timeout=30_000)
-            log(f"Stap 2: Pagina geladen — URL: {page.url}")
-            if "//" in page.url.split("FS9PROD")[1] if "FS9PROD" in page.url else False:
-                log("⚠ Dubbele slash gedetecteerd — opnieuw proberen...")
-                await asyncio.sleep(3)
-                await page.goto(WO_NIEUW_URL, wait_until="domcontentloaded", timeout=30_000)
-                log(f"Stap 2: Herpoging — {page.url}")
+            # ── 1b. PO-check: bestaat er al een openstaande PO-WO? ──────────
+            bestaande_wo = None
+            if type_verzoek == "Preventief onderhoud":
+                log("Stap 1b: Preventief onderhoud → eerst zoeken naar bestaande PO-WO...")
+                bestaande_wo = await zoek_po_wo_voor_tnummer(page, t_nummer, stap_log=log)
 
-            # ── 3. PTS toggle ──────────────────────────────────────────────
-            log("Stap 3: PTS toggle...")
-            await wacht_op_element(page, "#PTS_CFG_CL_WRK_PTS_PAGE_TOGGLE", log=log)
-            await page.click("#PTS_CFG_CL_WRK_PTS_PAGE_TOGGLE")
-            await asyncio.sleep(3)
-            await page.click("#PTS_CFG_CL_WRK_PTS_ADD_BTN")
-            await asyncio.sleep(1)
-            log("Stap 3: ✓ PTS toggle klaar")
+                if not bestaande_wo.get("ok"):
+                    log(f"❌ PO-zoekstap mislukt: {bestaande_wo.get('fout')}")
+                    await browser.close()
+                    resultaat["fout"] = f"PO-zoekstap mislukt: {bestaande_wo.get('fout')}"
+                    sr_update(rapport_id, status="fout", log=log_lijnen)
+                    return resultaat
 
-            # ── 4. WO-type = AO ────────────────────────────────────────────
-            log("Stap 4: WO-type 'AO' instellen...")
-            try:
-                await page.wait_for_selector("#UZFM_WO_UZ_WO_TYPE", state="visible", timeout=10_000)
-                await page.select_option("#UZFM_WO_UZ_WO_TYPE", value="AO")
-                await asyncio.sleep(0.5)
-                log("Stap 4: ✓ WO-type 'AO' geselecteerd")
-            except Exception as e:
-                log(f"Stap 4: ⚠ select_option mislukt ({e}) — fallback via toetsenbord")
-                await page.click("#UZFM_WO_UZ_WO_TYPE")
-                await page.keyboard.press("a")
-                await asyncio.sleep(0.3)
-                log("Stap 4: ✓ WO-type fallback klaar")
+                if bestaande_wo.get("al_inuitv"):
+                    gevonden_wo_id = bestaande_wo["wo_id"]
+                    log(f"⚠ WO {gevonden_wo_id} staat al op INUITV — geen actie ondernomen, "
+                        f"controleer deze WO manueel in PeopleSoft")
+                    await browser.close()
+                    resultaat["wo_id"] = gevonden_wo_id
+                    resultaat["fout"] = f"Bestaande WO {gevonden_wo_id} staat al op INUITV — niet opnieuw aangemaakt"
+                    sr_update(rapport_id, wo_id=gevonden_wo_id, status="fout", log=log_lijnen)
+                    return resultaat
 
-            # ── 4b. WO-bron = MAN ─────────────────────────────────────────
-            log("Stap 4b: WO-bron 'MAN' instellen...")
-            try:
-                await page.wait_for_selector("#UZFM_WO_UZ_WO_BRON", state="visible", timeout=10_000)
-                await page.select_option("#UZFM_WO_UZ_WO_BRON", value="MAN")
-                await asyncio.sleep(0.5)
-                log("Stap 4b: ✓ WO-bron 'MAN' geselecteerd")
-            except Exception as e:
-                log(f"Stap 4b: ⚠ WO-bron instellen mislukt: {e}")
+                if not bestaande_wo.get("geen_wo") and bestaande_wo.get("wo_id"):
+                    log(f"Stap 1b: ✓ Bestaande PO-WO gevonden (status GOED): "
+                        f"{bestaande_wo['wo_id']} → koppelen i.p.v. nieuwe WO aanmaken")
+                else:
+                    log("Stap 1b: Geen bestaande PO-WO gevonden → nieuwe WO aanmaken (type PO)")
 
-            # ── 5. T-nummer invullen ───────────────────────────────────────
-            t_nr_field       = '[id="UZFM_WO_UZ_OBJ_ID$12$"]'
-            omschr_div       = "#win0divUZFM_OBJECT_UZ_OMSCHR150"
+            wo_type = "PO" if type_verzoek == "Preventief onderhoud" else "AO"
+            wo_id = None
             uitvoerder_field = '[id="UZFM_WO_UITVOER_OPRID$0"]'
 
-            log(f"Stap 5: T-nummer '{t_nummer}' invullen...")
-            for poging in range(10):
-                await page.fill(t_nr_field, t_nummer)
+            if bestaande_wo and not bestaande_wo.get("geen_wo") and bestaande_wo.get("wo_id"):
+                # ── Bestaande PO-WO openen en uitvoerder invullen ───────────
+                wo_id = bestaande_wo["wo_id"]
+                url = WO_DETAIL_URL.format(wo_id=wo_id)
+                log(f"Stap 2: Navigeren naar bestaande WO {wo_id}: {url}")
+                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+                await page.wait_for_selector("#UZFM_WO_UZ_WO_STATUS", state="visible", timeout=20_000)
+                log("Stap 2: ✓ Bestaande WO geladen")
+
+                log(f"Stap 7: Uitvoerder '{UITVOERDER}' invullen...")
                 await page.click(uitvoerder_field)
+                await asyncio.sleep(0.2)
+                await page.keyboard.press("Control+a")
+                await page.type(uitvoerder_field, UITVOERDER, delay=50)
+                await page.keyboard.press("Tab")
+                await asyncio.sleep(2)
+                log("Stap 7: ✓ Uitvoerder klaar")
+
+            else:
+                # ── Nieuwe WO aanmaken (bestaand gedrag, met dynamisch type) ─
+                log(f"Stap 2: Navigeren naar nieuw WO: {WO_NIEUW_URL}")
+                await page.goto(WO_NIEUW_URL, wait_until="domcontentloaded", timeout=30_000)
+                log(f"Stap 2: Pagina geladen — URL: {page.url}")
+                if "//" in page.url.split("FS9PROD")[1] if "FS9PROD" in page.url else False:
+                    log("⚠ Dubbele slash gedetecteerd — opnieuw proberen...")
+                    await asyncio.sleep(3)
+                    await page.goto(WO_NIEUW_URL, wait_until="domcontentloaded", timeout=30_000)
+                    log(f"Stap 2: Herpoging — {page.url}")
+
+                # ── 3. PTS toggle ────────────────────────────────────────────
+                log("Stap 3: PTS toggle...")
+                await wacht_op_element(page, "#PTS_CFG_CL_WRK_PTS_PAGE_TOGGLE", log=log)
+                await page.click("#PTS_CFG_CL_WRK_PTS_PAGE_TOGGLE")
                 await asyncio.sleep(3)
+                await page.click("#PTS_CFG_CL_WRK_PTS_ADD_BTN")
+                await asyncio.sleep(1)
+                log("Stap 3: ✓ PTS toggle klaar")
+
+                # ── 4. WO-type ────────────────────────────────────────────────
+                log(f"Stap 4: WO-type '{wo_type}' instellen...")
                 try:
-                    tekst = await page.locator(omschr_div).inner_text(timeout=3_000)
-                    if tekst and tekst.strip():
-                        log(f"Stap 5: ✓ PeopleSoft omschrijving = '{tekst.strip()[:60]}'")
-                        break
-                    log(f"Stap 5: Omschrijving leeg (poging {poging+1}/10)...")
+                    await page.wait_for_selector("#UZFM_WO_UZ_WO_TYPE", state="visible", timeout=10_000)
+                    await page.select_option("#UZFM_WO_UZ_WO_TYPE", value=wo_type)
+                    await asyncio.sleep(0.5)
+                    log(f"Stap 4: ✓ WO-type '{wo_type}' geselecteerd")
                 except Exception as e:
-                    log(f"Stap 5: Exceptie (poging {poging+1}/10): {e}")
+                    log(f"Stap 4: ⚠ select_option mislukt ({e}) — fallback via toetsenbord")
+                    await page.click("#UZFM_WO_UZ_WO_TYPE")
+                    await page.keyboard.press(wo_type[0].lower())
+                    await asyncio.sleep(0.3)
+                    log("Stap 4: ✓ WO-type fallback klaar")
 
-            # ── 6. Omschrijving invullen — NA T-nummer lookup (anders reset PS het veld) ──
-            log("Stap 6: Omschrijving invullen...")
-            try:
-                await wacht_op_element(page, "#UZFM_WO_UZ_OMSCHR254", log=log)
-                await page.fill("#UZFM_WO_UZ_OMSCHR254", omschrijving)
-                log(f"Stap 6: ✓ Omschrijving '{omschrijving[:60]}'")
-            except Exception as e:
-                log(f"Stap 6: ⚠ Omschrijving mislukt: {e}")
-
-            # ── 7. Uitvoerder ──────────────────────────────────────────────
-            log(f"Stap 7: Uitvoerder '{UITVOERDER}' invullen...")
-            await page.click(uitvoerder_field)
-            await asyncio.sleep(0.2)
-            await page.keyboard.press("Control+a")
-            await page.type(uitvoerder_field, UITVOERDER, delay=50)
-            await page.keyboard.press("Tab")
-            await asyncio.sleep(2)
-            log("Stap 7: ✓ Uitvoerder klaar")
-
-            # ── 8. Eerste opslaan ──────────────────────────────────────────
-            wo_id = None
-            log("Stap 8: Eerste opslaan...")
-            await page.click('[id="#ICSave"]')
-            await asyncio.sleep(2)
-
-            for poging in range(10):
-                await asyncio.sleep(3)
+                # ── 4b. WO-bron = MAN ─────────────────────────────────────────
+                log("Stap 4b: WO-bron 'MAN' instellen...")
                 try:
-                    status = await page.locator("#UZFM_WO_UZ_WO_STATUS").inner_text(timeout=5_000)
-                    log(f"Stap 8: Status = '{status.strip()}' (poging {poging+1})")
-                    if status.strip() in ("INUITV", "NIEUW", "OPEN"):
-                        break
+                    await page.wait_for_selector("#UZFM_WO_UZ_WO_BRON", state="visible", timeout=10_000)
+                    await page.select_option("#UZFM_WO_UZ_WO_BRON", value="MAN")
+                    await asyncio.sleep(0.5)
+                    log("Stap 4b: ✓ WO-bron 'MAN' geselecteerd")
                 except Exception as e:
-                    log(f"Stap 8: Status niet leesbaar: {e}")
+                    log(f"Stap 4b: ⚠ WO-bron instellen mislukt: {e}")
 
-            # WO-ID lezen
-            try:
-                wo_id_el = await page.query_selector("#UZFM_WO_UZ_WO_ID")
-                if wo_id_el:
-                    wo_id = (await wo_id_el.inner_text()).strip()
-                    if not wo_id:
-                        wo_id = (await wo_id_el.get_attribute("value") or "").strip()
-            except Exception:
-                pass
+                # ── 5. T-nummer invullen ───────────────────────────────────────
+                t_nr_field = '[id="UZFM_WO_UZ_OBJ_ID$12$"]'
+                omschr_div = "#win0divUZFM_OBJECT_UZ_OMSCHR150"
 
-            # URL-fallback voor WO-ID
-            if not wo_id:
-                m = re.search(r"UZ_WO_ID=(\d+)", page.url)
-                if m:
-                    wo_id = m.group(1)
+                log(f"Stap 5: T-nummer '{t_nummer}' invullen...")
+                for poging in range(10):
+                    await page.fill(t_nr_field, t_nummer)
+                    await page.click(uitvoerder_field)
+                    await asyncio.sleep(3)
+                    try:
+                        tekst = await page.locator(omschr_div).inner_text(timeout=3_000)
+                        if tekst and tekst.strip():
+                            log(f"Stap 5: ✓ PeopleSoft omschrijving = '{tekst.strip()[:60]}'")
+                            break
+                        log(f"Stap 5: Omschrijving leeg (poging {poging+1}/10)...")
+                    except Exception as e:
+                        log(f"Stap 5: Exceptie (poging {poging+1}/10): {e}")
 
-            log(f"Stap 8: ✓ WO-ID = '{wo_id}'")
+                # ── 6. Omschrijving invullen — NA T-nummer lookup (anders reset PS het veld) ──
+                log("Stap 6: Omschrijving invullen...")
+                try:
+                    await wacht_op_element(page, "#UZFM_WO_UZ_OMSCHR254", log=log)
+                    await page.fill("#UZFM_WO_UZ_OMSCHR254", omschrijving)
+                    log(f"Stap 6: ✓ Omschrijving '{omschrijving[:60]}'")
+                except Exception as e:
+                    log(f"Stap 6: ⚠ Omschrijving mislukt: {e}")
+
+                # ── 7. Uitvoerder ──────────────────────────────────────────────
+                log(f"Stap 7: Uitvoerder '{UITVOERDER}' invullen...")
+                await page.click(uitvoerder_field)
+                await asyncio.sleep(0.2)
+                await page.keyboard.press("Control+a")
+                await page.type(uitvoerder_field, UITVOERDER, delay=50)
+                await page.keyboard.press("Tab")
+                await asyncio.sleep(2)
+                log("Stap 7: ✓ Uitvoerder klaar")
+
+                # ── 8. Eerste opslaan ────────────────────────────────────────
+                log("Stap 8: Eerste opslaan...")
+                await page.click('[id="#ICSave"]')
+                await asyncio.sleep(2)
+
+                for poging in range(10):
+                    await asyncio.sleep(3)
+                    try:
+                        status = await page.locator("#UZFM_WO_UZ_WO_STATUS").inner_text(timeout=5_000)
+                        log(f"Stap 8: Status = '{status.strip()}' (poging {poging+1})")
+                        if status.strip() in ("INUITV", "NIEUW", "OPEN"):
+                            break
+                    except Exception as e:
+                        log(f"Stap 8: Status niet leesbaar: {e}")
+
+                # WO-ID lezen
+                try:
+                    wo_id_el = await page.query_selector("#UZFM_WO_UZ_WO_ID")
+                    if wo_id_el:
+                        wo_id = (await wo_id_el.inner_text()).strip()
+                        if not wo_id:
+                            wo_id = (await wo_id_el.get_attribute("value") or "").strip()
+                except Exception:
+                    pass
+
+                # URL-fallback voor WO-ID
+                if not wo_id:
+                    m = re.search(r"UZ_WO_ID=(\d+)", page.url)
+                    if m:
+                        wo_id = m.group(1)
+
+                log(f"Stap 8: ✓ WO-ID = '{wo_id}'")
 
             # ── 9. Rapportage tab: commentaar + oplossing ─────────────────
             log("Stap 9: Rapportage-tab openen...")

@@ -301,7 +301,13 @@ function maakRij(r) {
   tr.innerHTML = `
     <td style="font-family:var(--mono);font-size:11px;color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.bestandsnaam || '')}">${escHTML(r.bestandsnaam || '—')}</td>
     <td style="font-weight:600">${escHTML(r.firma || '—')}</td>
-    <td style="font-size:12px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.product || '')} — ${escHTML(r.type_verzoek || '')}">${escHTML(r.product || '—')}</td>
+    <td style="max-width:170px">
+      <div style="font-size:12px;color:var(--muted);max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHTML(r.product || '')}">${escHTML(r.product || '—')}</div>
+      <select style="margin-top:3px;font-size:11px;padding:1px 3px;width:100%" ${(woKlaar || isBezig) ? 'disabled' : ''} onchange="patchRapport('${r.id}', { type_verzoek: this.value })">
+        <option value="Herstelling" ${r.type_verzoek !== 'Preventief onderhoud' ? 'selected' : ''}>Herstelling</option>
+        <option value="Preventief onderhoud" ${r.type_verzoek === 'Preventief onderhoud' ? 'selected' : ''}>Preventief onderhoud</option>
+      </select>
+    </td>
     <td id="sn-cell-${r.id}">${snChip}</td>
     <td id="t-cell-${r.id}">${tChip}</td>
     <td style="font-family:var(--mono);font-size:12px">${escHTML(r.datum || '—')}</td>
