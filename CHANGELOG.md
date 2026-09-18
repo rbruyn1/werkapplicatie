@@ -24,3 +24,13 @@ historiek).
   onderhoud" wanneer van toepassing.
 - Fix: werktype-selectie "PO" in het zoekscherm vereist slechts 1x een druk
   op de toets "p" (was voorheen 2x, wat een verkeerde selectie kon geven).
+
+### Service rapporten — meerdere PDF's per rapport/WO
+- Nieuwe knop "📎+" per rapport om een extra PDF-bijlage te koppelen (bv.
+  het onderhoudsprotocol naast het service rapport bij een PO). Extra
+  bijlagen worden getoond als klein chipje met bestandsnaam en een ✕ om
+  ze terug te verwijderen.
+- Bij het aanmaken/koppelen van de WO worden het hoofd-service-rapport én
+  alle gekoppelde extra bijlagen na elkaar naar dezelfde WO geüpload
+  (beschrijving = bestandsnaam zonder extensie voor de extra bijlagen).
+

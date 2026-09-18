@@ -323,9 +323,16 @@ function maakRij(r) {
         ${heeftSN && !heeftT && !isBezig ? `<button class="btn btn-primary btn-sm" onclick="zoekTnummer('${r.id}')">🔍 T-nr</button>` : ''}
         ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-success btn-sm" onclick="maakWO('${r.id}')">⚡ WO</button>` : ''}
         ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" onclick="bewerkTnummer('${r.id}')">✏ T-nr</button>` : ''}
+        ${!woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" title="Extra bijlage toevoegen (bv. onderhoudsprotocol)" onclick="document.getElementById('bijlage-input-${r.id}').click()">📎+</button>
+        <input type="file" id="bijlage-input-${r.id}" accept="application/pdf" multiple style="display:none" onchange="uploadBijlage('${r.id}', this.files)">` : ''}
         ${isBezig ? `<span class="badge badge-bezig">BEZIG…</span>` : ''}
         <button class="btn btn-danger btn-sm" onclick="verwijder('${r.id}')">✕</button>
       </div>
+      ${(r.extra_bijlagen && r.extra_bijlagen.length) ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px">${r.extra_bijlagen.map((b, i) => `
+        <span style="font-size:10px;background:#eef1f8;border:1px solid var(--border);border-radius:3px;padding:1px 5px;display:inline-flex;align-items:center;gap:4px" title="${escHTML(b.bestandsnaam)}">
+          📎 ${escHTML(b.bestandsnaam.length > 16 ? b.bestandsnaam.slice(0, 16) + '…' : b.bestandsnaam)}
+          ${!woKlaar ? `<a href="#" style="color:var(--red);text-decoration:none" onclick="verwijderBijlage('${r.id}', ${i}); return false;">✕</a>` : ''}
+        </span>`).join('')}</div>` : ''}
     </td>`;
   return tr;
 }
@@ -359,6 +366,33 @@ async function patchRapport(id, velden) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(velden)
   });
+  await laadRapporten();
+}
+
+// ── Extra bijlagen (bv. onderhoudsprotocol) ────────────────────────────────────
+async function uploadBijlage(id, files) {
+  if (!files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append('bestanden', f);
+  try {
+    const r = await fetch(`/api/service-rapporten/${id}/bijlage`, { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!data.ok) alert('Bijlage toevoegen mislukt: ' + (data.fout || 'onbekende fout'));
+  } catch (e) {
+    alert('Bijlage toevoegen mislukt: ' + e);
+  }
+  await laadRapporten();
+}
+
+async function verwijderBijlage(id, index) {
+  if (!confirm('Deze bijlage verwijderen?')) return;
+  try {
+    const r = await fetch(`/api/service-rapporten/${id}/bijlage/${index}`, { method: 'DELETE' });
+    const data = await r.json();
+    if (!data.ok) alert('Verwijderen mislukt: ' + (data.fout || 'onbekende fout'));
+  } catch (e) {
+    alert('Verwijderen mislukt: ' + e);
+  }
   await laadRapporten();
 }
 

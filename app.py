@@ -1899,6 +1899,43 @@ def api_sr_verwijder(rapport_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/service-rapporten/<rapport_id>/bijlage", methods=["POST"])
+def api_sr_bijlage_toevoegen(rapport_id):
+    """Extra PDF-bijlage (bv. onderhoudsprotocol) koppelen aan een bestaand rapport."""
+    from wo_service_rapport import sr_bijlage_toevoegen
+    try:
+        if "bestanden" not in request.files:
+            return jsonify({"ok": False, "fout": "Geen bestanden meegestuurd"}), 400
+
+        bestanden = [b for b in request.files.getlist("bestanden")
+                     if b.filename and b.filename.lower().endswith(".pdf")]
+        if not bestanden:
+            return jsonify({"ok": False, "fout": "Geen geldige PDF-bestanden gevonden"}), 400
+
+        rapport = None
+        for bestand in bestanden:
+            nieuwe_naam = _trim_sr_bestandsnaam(bestand.filename, SR_UPLOAD_DIR)
+            pad = SR_UPLOAD_DIR / nieuwe_naam
+            bestand.save(str(pad))
+            rapport = sr_bijlage_toevoegen(rapport_id, bestand.filename, str(pad))
+
+        if rapport is None:
+            return jsonify({"ok": False, "fout": "Rapport niet gevonden"}), 404
+        return jsonify({"ok": True, "rapport": rapport})
+    except Exception as e:
+        return jsonify({"ok": False, "fout": f"Onverwachte fout: {e}"}), 500
+
+
+@app.route("/api/service-rapporten/<rapport_id>/bijlage/<int:index>", methods=["DELETE"])
+def api_sr_bijlage_verwijderen(rapport_id, index):
+    """Een gekoppelde extra bijlage terug verwijderen."""
+    from wo_service_rapport import sr_bijlage_verwijderen
+    rapport = sr_bijlage_verwijderen(rapport_id, index)
+    if rapport is None:
+        return jsonify({"ok": False, "fout": "Rapport niet gevonden"}), 404
+    return jsonify({"ok": True, "rapport": rapport})
+
+
 @app.route("/api/service-rapporten/<rapport_id>/zoek-tnummer", methods=["POST"])
 def api_sr_zoek_tnummer(rapport_id):
     """Start een asynchrone PeopleSoft zoekopdracht voor het T-nummer."""

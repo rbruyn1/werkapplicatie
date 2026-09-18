@@ -182,6 +182,7 @@ def sr_voeg_toe(rapport: dict) -> dict:
     rapport.setdefault("wo_id", "")
     rapport.setdefault("probleemmelding", "")
     rapport.setdefault("oplossing", "")
+    rapport.setdefault("extra_bijlagen", [])  # [{"bestandsnaam": "...", "pad": "..."}]
     rapport.setdefault("log", [])
     data["rapporten"].append(rapport)
     sr_sla_op(data)
@@ -194,6 +195,37 @@ def sr_update(rapport_id: str, **velden):
         if r["id"] == rapport_id:
             r.update(velden)
     sr_sla_op(data)
+
+
+def sr_bijlage_toevoegen(rapport_id: str, bestandsnaam: str, pad: str) -> dict | None:
+    """Voeg een extra bijlage (bv. onderhoudsprotocol) toe aan een bestaand rapport."""
+    data = sr_lees()
+    for r in data["rapporten"]:
+        if r["id"] == rapport_id:
+            r.setdefault("extra_bijlagen", [])
+            r["extra_bijlagen"].append({"bestandsnaam": bestandsnaam, "pad": pad})
+            sr_sla_op(data)
+            return r
+    return None
+
+
+def sr_bijlage_verwijderen(rapport_id: str, index: int) -> dict | None:
+    """Verwijder een extra bijlage op basis van zijn index in de lijst."""
+    data = sr_lees()
+    for r in data["rapporten"]:
+        if r["id"] == rapport_id:
+            bijlagen = r.get("extra_bijlagen", [])
+            if 0 <= index < len(bijlagen):
+                verwijderd = bijlagen.pop(index)
+                bestand_pad = Path(verwijderd.get("pad", ""))
+                if bestand_pad.exists():
+                    try:
+                        bestand_pad.unlink()
+                    except Exception:
+                        pass
+                sr_sla_op(data)
+            return r
+    return None
 
 
 def sr_verwijder(rapport_id: str):
@@ -1568,67 +1600,76 @@ async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bo
                     log(f"Stap 13: Status niet leesbaar: {e}")
 
 
-            # ── 14. Bijlagen-tab openen ────────────────────────────────────
-            pdf_upload_succesvol = False  # Track of PDF upload went well
+            # ── 14. Bijlagen uploaden (hoofd-PDF + eventuele extra bijlagen) ──
+            extra_bijlagen = rapport.get("extra_bijlagen", []) or []
+            te_uploaden = []
             if pdf_pad and Path(pdf_pad).exists():
-                log("Stap 14: Bijlagen-tab openen...")
-                tc = await zoek_win1_frame(page, log=log)
-                await tc.click("#ICTAB_4")
-                await asyncio.sleep(2)
-                log("Stap 14: ✓ Bijlagen-tab geladen")
+                te_uploaden.append((pdf_pad, "Service rapport"))
+            for bijlage in extra_bijlagen:
+                bijlage_pad = bijlage.get("pad", "")
+                if bijlage_pad and Path(bijlage_pad).exists():
+                    beschrijving_bijlage = Path(bijlage.get("bestandsnaam") or bijlage_pad).stem
+                    te_uploaden.append((bijlage_pad, beschrijving_bijlage))
+                else:
+                    log(f"Stap 14: ⚠ Extra bijlage niet gevonden op schijf, overgeslagen: {bijlage_pad}")
 
-                # ── 15. Klik op Add-knop (+ icoontje) ─────────────────────
-                log("Stap 15: Add-knop klikken...")
+            pdf_upload_succesvol = False  # Track of PDF upload went well
+
+            async def _upload_bijlage(bestand_pad: str, beschrijving_bijlage: str, rij_index: int) -> bool:
+                """Eén bijlage (hoofdrapport of extra) toevoegen aan de WO. Retourneert of het lukte."""
+                tc = await zoek_win1_frame(page, log=log)
+                if rij_index == 0:
+                    log("Stap 14: Bijlagen-tab openen...")
+                    await tc.click("#ICTAB_4")
+                    await asyncio.sleep(2)
+                    log("Stap 14: ✓ Bijlagen-tab geladen")
+
+                # ── Add-knop ────────────────────────────────────────────────
+                log(f"Stap 15 (rij {rij_index}): Add-knop klikken...")
                 await tc.wait_for_selector("#UZ_ATTACH_BTN\\$0", state="visible", timeout=10_000)
                 await tc.click("#UZ_ATTACH_BTN\\$0")
                 await asyncio.sleep(3)
-                log("Stap 15: ✓ Add geklikt")
+                log(f"Stap 15 (rij {rij_index}): ✓ Add geklikt")
 
-                # ── 16. Load Attachment knop klikken → opent ptModFrame_0 popup ──
-                log("Stap 16: Load Attachment klikken...")
+                # ── Load Attachment knop → opent ptModFrame_0 popup ──────────
+                log(f"Stap 16 (rij {rij_index}): Load Attachment klikken...")
                 await tc.wait_for_selector("#UZ_ATTACH_WRK_UZ_ATTACH_ADD", state="visible", timeout=10_000)
                 await tc.click("#UZ_ATTACH_WRK_UZ_ATTACH_ADD")
                 await asyncio.sleep(2)
-                log("Stap 16: ✓ Load Attachment geklikt")
+                log(f"Stap 16 (rij {rij_index}): ✓ Load Attachment geklikt")
 
-                # ── 17. Bestand kiezen via iframe ptModFrame_0 ─────────────
-                log("Stap 17: File Attachment popup zoeken (ptModFrame_0)...")
+                # ── Bestand kiezen via iframe ptModFrame_0 ────────────────────
+                log(f"Stap 17 (rij {rij_index}): File Attachment popup zoeken (ptModFrame_0)...")
                 upload_modal = next((f for f in page.frames if f.name == "ptModFrame_0"), None)
                 if not upload_modal:
                     log("❌ Upload modal iframe niet gevonden")
-                    await browser.close()
-                    resultaat["fout"] = "Upload modal niet gevonden"
-                    return resultaat
-                log("Stap 17: ✓ Upload modal gevonden")
+                    return False
 
-                # Zoek de file input in de popup (de "Bestand kiezen" knop)
                 await asyncio.sleep(1)
                 file_input = await upload_modal.query_selector("input[type='file']")
                 if not file_input:
                     log("❌ File input niet gevonden in upload modal")
-                    await browser.close()
-                    resultaat["fout"] = "File input niet gevonden"
-                    return resultaat
+                    return False
 
-                log(f"Stap 17: Bestand instellen: {Path(pdf_pad).name}")
-                await file_input.set_input_files(pdf_pad)
+                log(f"Stap 17 (rij {rij_index}): Bestand instellen: {Path(bestand_pad).name}")
+                await file_input.set_input_files(bestand_pad)
                 await asyncio.sleep(1)
-                log("Stap 17: ✓ Bestand geselecteerd")
+                log(f"Stap 17 (rij {rij_index}): ✓ Bestand geselecteerd")
 
-                # ── 18. Upload knop klikken in popup ──────────────────────
-                log("Stap 18: Wachten tot Upload-knop enabled is...")
+                # ── Upload knop klikken in popup ───────────────────────────────
+                log(f"Stap 18 (rij {rij_index}): Wachten tot Upload-knop enabled is...")
                 try:
                     await upload_modal.wait_for_selector(
                         "#Upload:not([disabled])", state="visible", timeout=10_000
                     )
                     await upload_modal.click("#Upload")
                     await asyncio.sleep(3)
-                    log("Stap 18: ✓ Upload geklikt")
+                    log(f"Stap 18 (rij {rij_index}): ✓ Upload geklikt")
                 except Exception as e:
-                    log(f"Stap 18: ⚠ Upload knop niet gevonden of niet enabled: {e}")
+                    log(f"Stap 18 (rij {rij_index}): ⚠ Upload knop niet gevonden of niet enabled: {e}")
 
-                # ── 19. Wacht tot bestandsnaam zichtbaar in hoofdpagina ───
-                log("Stap 19: Wachten tot bestandsnaam zichtbaar is na upload...")
+                # ── Wacht tot bestandsnaam zichtbaar in hoofdpagina ────────────
+                log(f"Stap 19 (rij {rij_index}): Wachten tot bestandsnaam zichtbaar is na upload...")
                 bestandsnaam_ok = False
                 for _ in range(30):
                     await asyncio.sleep(1)
@@ -1637,60 +1678,67 @@ async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bo
                         if el:
                             tekst = (await el.inner_text()).strip()
                             if tekst:
-                                log(f"Stap 19: ✓ Bestandsnaam zichtbaar: '{tekst}'")
+                                log(f"Stap 19 (rij {rij_index}): ✓ Bestandsnaam zichtbaar: '{tekst}'")
                                 bestandsnaam_ok = True
                                 break
                     except Exception:
                         pass
                 if not bestandsnaam_ok:
-                    log("Stap 19: ⚠ Bestandsnaam niet verschenen na 30s — doorgaan")
+                    log(f"Stap 19 (rij {rij_index}): ⚠ Bestandsnaam niet verschenen na 30s — doorgaan")
 
-                # ── 20. Beschrijving invullen = "Service rapport" ─────────
-                log("Stap 20: Beschrijving 'Service rapport' invullen...")
+                # ── Beschrijving invullen ───────────────────────────────────────
+                log(f"Stap 20 (rij {rij_index}): Beschrijving '{beschrijving_bijlage}' invullen...")
                 try:
                     await tc.wait_for_selector("#UZ_ATTACHMENT_DESCR50_MIXED", state="visible", timeout=10_000)
-                    await tc.fill("#UZ_ATTACHMENT_DESCR50_MIXED", "Service rapport")
-                    log("Stap 20: ✓ Beschrijving ingevuld")
+                    await tc.fill("#UZ_ATTACHMENT_DESCR50_MIXED", beschrijving_bijlage[:50])
+                    log(f"Stap 20 (rij {rij_index}): ✓ Beschrijving ingevuld")
                 except Exception as e:
-                    log(f"Stap 20: ⚠ Beschrijving invullen mislukt: {e}")
+                    log(f"Stap 20 (rij {rij_index}): ⚠ Beschrijving invullen mislukt: {e}")
 
-                # ── 21. OK klikken ─────────────────────────────────────────
-                log("Stap 21: OK klikken...")
+                # ── OK klikken ───────────────────────────────────────────────
+                log(f"Stap 21 (rij {rij_index}): OK klikken...")
                 try:
                     await tc.click('[id="#ICSave"]')
                     await asyncio.sleep(3)
-                    log("Stap 21: ✓ OK geklikt")
+                    log(f"Stap 21 (rij {rij_index}): ✓ OK geklikt")
                 except Exception as e:
-                    log(f"Stap 21: ⚠ OK klikken mislukt: {e}")
+                    log(f"Stap 21 (rij {rij_index}): ⚠ OK klikken mislukt: {e}")
 
-                # ── 22. Wacht tot bijlage zichtbaar in grid ────────────────
-                log("Stap 22: Wachten tot bijlage in grid staat...")
+                # ── Wacht tot bijlage zichtbaar in grid op de verwachte rij ────
+                log(f"Stap 22 (rij {rij_index}): Wachten tot bijlage in grid staat...")
                 try:
                     await tc.wait_for_selector(
-                        "#UZ_ATTACHMENTVW_ATTACHUSERFILE\\$0", state="visible", timeout=15_000
+                        f"#UZ_ATTACHMENTVW_ATTACHUSERFILE\\${rij_index}", state="visible", timeout=15_000
                     )
-                    bijlage_tekst = await tc.locator("#UZ_ATTACHMENTVW_ATTACHUSERFILE\\$0").inner_text()
-                    log(f"Stap 22: ✓ Bijlage in grid: '{bijlage_tekst.strip()}'")
+                    bijlage_tekst = await tc.locator(f"#UZ_ATTACHMENTVW_ATTACHUSERFILE\\${rij_index}").inner_text()
+                    log(f"Stap 22 (rij {rij_index}): ✓ Bijlage in grid: '{bijlage_tekst.strip()}'")
                 except Exception as e:
-                    log(f"Stap 22: ⚠ Bijlage grid niet gevonden: {e}")
+                    log(f"Stap 22 (rij {rij_index}): ⚠ Bijlage grid niet gevonden op rij {rij_index}: {e}")
 
-                # ── 23. Type instellen op SR ───────────────────────────────
-                log("Stap 23: Bijlagetype 'SR' selecteren...")
+                # ── Type instellen op SR ────────────────────────────────────────
+                log(f"Stap 23 (rij {rij_index}): Bijlagetype 'SR' selecteren...")
                 try:
-                    await tc.wait_for_selector("#UZ_ATTACH_TYPE\\$0", state="visible", timeout=10_000)
-                    await tc.select_option("#UZ_ATTACH_TYPE\\$0", value="SR")
+                    await tc.wait_for_selector(f"#UZ_ATTACH_TYPE\\${rij_index}", state="visible", timeout=10_000)
+                    await tc.select_option(f"#UZ_ATTACH_TYPE\\${rij_index}", value="SR")
                     await asyncio.sleep(2)
-                    log("Stap 23: ✓ Type 'SR' geselecteerd")
+                    log(f"Stap 23 (rij {rij_index}): ✓ Type 'SR' geselecteerd")
                 except Exception as e:
-                    log(f"Stap 23: ⚠ Type selecteren mislukt: {e}")
+                    log(f"Stap 23 (rij {rij_index}): ⚠ Type selecteren mislukt: {e}")
 
-                # ── 24. Opslaan na bijlage ─────────────────────────────────
-                log("Stap 24: Opslaan na bijlage...")
+                # ── Opslaan na bijlage ───────────────────────────────────────────
+                log(f"Stap 24 (rij {rij_index}): Opslaan na bijlage...")
                 await page.click('[id="#ICSave"]')
                 await asyncio.sleep(3)
-                log("Stap 24: ✓ Opgeslagen")
+                log(f"Stap 24 (rij {rij_index}): ✓ Opgeslagen")
+                return True
 
-                pdf_upload_succesvol = True  # PDF upload was successful
+            if te_uploaden:
+                for i, (bestand_pad, beschrijving_bijlage) in enumerate(te_uploaden):
+                    ok_upload = await _upload_bijlage(bestand_pad, beschrijving_bijlage, i)
+                    if i == 0:
+                        pdf_upload_succesvol = ok_upload
+                    if not ok_upload:
+                        log(f"Stap 14: ⚠ Upload van bijlage {i} ('{beschrijving_bijlage}') mislukt — verdergaan met volgende")
             else:
                 log("Stap 14: Geen PDF-pad beschikbaar — bijlage overgeslagen")
 
