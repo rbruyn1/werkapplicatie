@@ -36,4 +36,9 @@ historiek).
 - Een extra bijlage kan nu ook rechtstreeks op de rij van het rapport
   gesleept worden (bv. een PDF-bijlage rechtstreeks vanuit Outlook, zonder
   ze eerst lokaal te moeten opslaan) — als alternatief op de "📎+"-knop.
+- Fix: upload van een 2e (of volgende) bijlage mislukte met "Upload modal
+  iframe niet gevonden", omdat de popup-iframenaam hardcoded op
+  `ptModFrame_0` stond. PeopleSoft geeft elke volgende popup een oplopende
+  naam (`ptModFrame_1`, `ptModFrame_2`, ...) — dit wordt nu dynamisch
+  opgezocht.
 

@@ -1638,12 +1638,18 @@ async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bo
                 await asyncio.sleep(2)
                 log(f"Stap 16 (rij {rij_index}): ✓ Load Attachment geklikt")
 
-                # ── Bestand kiezen via iframe ptModFrame_0 ────────────────────
-                log(f"Stap 17 (rij {rij_index}): File Attachment popup zoeken (ptModFrame_0)...")
-                upload_modal = next((f for f in page.frames if f.name == "ptModFrame_0"), None)
+                # ── Bestand kiezen via popup-iframe (ptModFrame_N) ─────────────
+                # PeopleSoft geeft elke volgende popup een oplopende naam
+                # (ptModFrame_0, ptModFrame_1, ...) — dus niet hardcoden op
+                # _0, maar het laatst geopende ptModFrame_N-frame nemen.
+                log(f"Stap 17 (rij {rij_index}): File Attachment popup zoeken (ptModFrame_N)...")
+                modal_frames = [f for f in page.frames if f.name and re.match(r"^ptModFrame_\d+$", f.name)]
+                upload_modal = modal_frames[-1] if modal_frames else None
                 if not upload_modal:
-                    log("❌ Upload modal iframe niet gevonden")
+                    beschikbaar = [f.name or "(leeg)" for f in page.frames]
+                    log(f"❌ Upload modal iframe niet gevonden — beschikbare frames: {beschikbaar}")
                     return False
+                log(f"Stap 17 (rij {rij_index}): ✓ Modal gevonden: '{upload_modal.name}'")
 
                 await asyncio.sleep(1)
                 file_input = await upload_modal.query_selector("input[type='file']")
