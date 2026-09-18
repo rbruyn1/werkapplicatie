@@ -33,4 +33,7 @@ historiek).
 - Bij het aanmaken/koppelen van de WO worden het hoofd-service-rapport én
   alle gekoppelde extra bijlagen na elkaar naar dezelfde WO geüpload
   (beschrijving = bestandsnaam zonder extensie voor de extra bijlagen).
+- Een extra bijlage kan nu ook rechtstreeks op de rij van het rapport
+  gesleept worden (bv. een PDF-bijlage rechtstreeks vanuit Outlook, zonder
+  ze eerst lokaal te moeten opslaan) — als alternatief op de "📎+"-knop.
 

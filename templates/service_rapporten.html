@@ -50,6 +50,7 @@
   .upload-icon { font-size: 40px; margin-bottom: 12px; }
   .upload-zone p { color: var(--muted); font-family: var(--mono); font-size: 13px; }
   .upload-zone strong { color: var(--accent); }
+  tr.row-dragover td { background: #f0f5ff !important; box-shadow: inset 0 0 0 2px var(--accent); }
 
   /* ── Tabel ── */
   .panel { background: var(--panel); border-radius: 8px; border: 1px solid var(--border); overflow: hidden; }
@@ -189,6 +190,11 @@ dropzone.addEventListener('drop', e => {
 });
 fileInput.addEventListener('change', () => uploadBestanden(fileInput.files));
 
+// Voorkomt dat de browser wegnavigeert als een bestand net naast een rij
+// of de hoofd-dropzone wordt losgelaten.
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => { if (e.target === document.body) e.preventDefault(); });
+
 async function uploadBestanden(files) {
   if (!files.length) return;
   const fd = new FormData();
@@ -323,7 +329,7 @@ function maakRij(r) {
         ${heeftSN && !heeftT && !isBezig ? `<button class="btn btn-primary btn-sm" onclick="zoekTnummer('${r.id}')">🔍 T-nr</button>` : ''}
         ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-success btn-sm" onclick="maakWO('${r.id}')">⚡ WO</button>` : ''}
         ${heeftT && !woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" onclick="bewerkTnummer('${r.id}')">✏ T-nr</button>` : ''}
-        ${!woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" title="Extra bijlage toevoegen (bv. onderhoudsprotocol)" onclick="document.getElementById('bijlage-input-${r.id}').click()">📎+</button>
+        ${!woKlaar && !isBezig ? `<button class="btn btn-outline btn-sm" title="Extra bijlage toevoegen — klik, of sleep een PDF rechtstreeks op deze rij (werkt ook vanuit Outlook)" onclick="document.getElementById('bijlage-input-${r.id}').click()">📎+</button>
         <input type="file" id="bijlage-input-${r.id}" accept="application/pdf" multiple style="display:none" onchange="uploadBijlage('${r.id}', this.files)">` : ''}
         ${isBezig ? `<span class="badge badge-bezig">BEZIG…</span>` : ''}
         <button class="btn btn-danger btn-sm" onclick="verwijder('${r.id}')">✕</button>
@@ -334,6 +340,30 @@ function maakRij(r) {
           ${!woKlaar ? `<a href="#" style="color:var(--red);text-decoration:none" onclick="verwijderBijlage('${r.id}', ${i}); return false;">✕</a>` : ''}
         </span>`).join('')}</div>` : ''}
     </td>`;
+
+  // Rij droppable maken: een PDF (bv. rechtstreeks uit Outlook gesleept)
+  // wordt toegevoegd als extra bijlage bij dit rapport.
+  if (!woKlaar) {
+    tr.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      tr.classList.add('row-dragover');
+    });
+    tr.addEventListener('dragleave', () => tr.classList.remove('row-dragover'));
+    tr.addEventListener('drop', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      tr.classList.remove('row-dragover');
+      const gesleept = [...(e.dataTransfer?.files || [])];
+      const pdfs = gesleept.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+      if (!pdfs.length) {
+        alert('Enkel PDF-bestanden kunnen hier gesleept worden.');
+        return;
+      }
+      uploadBijlage(r.id, pdfs);
+    });
+  }
+
   return tr;
 }
 
