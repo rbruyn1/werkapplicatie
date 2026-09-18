@@ -253,6 +253,40 @@ def _pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
     return tekst
 
 
+def _classificeer_type_verzoek(*teksten: str) -> str:
+    """
+    Schat op basis van sleutelwoorden in de service-rapporttekst in of dit
+    om een PO (Preventief Onderhoud) gaat, of gewoon een Herstelling is.
+
+    Bij twijfel (geen enkele indicator gevonden) wordt altijd 'Herstelling'
+    teruggegeven — dit is enkel een startwaarde voor de dropdown in de UI,
+    de gebruiker kan dit nog altijd manueel corrigeren vóór de WO aangemaakt
+    wordt.
+    """
+    volledige_tekst = " ".join(t for t in teksten if t)
+    if not volledige_tekst:
+        return "Herstelling"
+
+    # Voluit geschreven termen — case-insensitief, weinig kans op vals-positief
+    po_patronen_ruim = [
+        r"preventief\s+onderhoud",
+        r"preventive\s+maintenance",
+        r"planned\s+maintenance",
+        r"po\s+volgens\s+protocol",
+    ]
+    for patroon in po_patronen_ruim:
+        if re.search(patroon, volledige_tekst, re.IGNORECASE):
+            return "Preventief onderhoud"
+
+    # Korte afkortingen ('PO', 'PM') enkel als losstaand hoofdletterwoord
+    # matchen (case-sensitief) — anders te veel valse positieven doordat
+    # 'po' of 'pm' toevallig in lopende tekst voorkomt.
+    if re.search(r"\bPO\b", volledige_tekst) or re.search(r"\bPM\b", volledige_tekst):
+        return "Preventief onderhoud"
+
+    return "Herstelling"
+
+
 def _detecteer_formaat(tekst: str) -> str:
     """Detecteer het PDF-formaat op basis van sleutelwoorden."""
     if "Werkorder #" in tekst and "Detail Servicerapport" in tekst:
@@ -948,6 +982,10 @@ def extraheer_sn_uit_pdf(pdf_pad: str | Path) -> dict:
 
     info["bestandsnaam"] = Path(pdf_pad).name
     info["pdf_tekst_preview"] = tekst[:500]
+    info["type_gedetecteerd"] = _classificeer_type_verzoek(
+        tekst, info.get("type_verzoek", ""), info.get("omschrijving_kort", ""),
+        info.get("activiteit_tekst", "")
+    )
     return info
 
 

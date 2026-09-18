@@ -1861,10 +1861,12 @@ def api_sr_upload():
                     "firma": info.get("firma", ""),
                     "formaat": info.get("formaat", ""),
                     "datum": info.get("datum", ""),
-                    # Standaard altijd 'Herstelling', ongeacht wat de PDF-extractie
-                    # gokt — gebruiker moet zelf bewust 'Preventief onderhoud'
-                    # kiezen in de UI vóór de WO aangemaakt wordt.
-                    "type_verzoek": "Herstelling",
+                    # Ingeschat op basis van sleutelwoorden (PO, Preventief
+                    # onderhoud, Preventive Maintenance, ...) in het rapport;
+                    # bij twijfel altijd 'Herstelling' (zie
+                    # _classificeer_type_verzoek in wo_service_rapport.py).
+                    # Gebruiker kan dit nog altijd manueel corrigeren in de UI.
+                    "type_verzoek": info.get("type_gedetecteerd", "Herstelling"),
                     "uren_arbeid": info.get("uren_arbeid", ""),
                     "werkorder_nr_firma": info.get("werkorder_nr", ""),
                     "probleemmelding": info.get("omschrijving_kort", ""),

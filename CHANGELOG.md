@@ -42,3 +42,15 @@ historiek).
   naam (`ptModFrame_1`, `ptModFrame_2`, ...) — dit wordt nu dynamisch
   opgezocht.
 
+### Service rapporten — automatische inschatting Herstelling/PO
+- Nieuwe `_classificeer_type_verzoek()` in `wo_service_rapport.py`: scant de
+  geëxtraheerde rapporttekst op sleutelwoorden ("Preventief onderhoud",
+  "Preventive Maintenance", "Planned Maintenance", "PO volgens protocol",
+  losstaand "PO"/"PM") om in te schatten of een rapport een PO betreft.
+- Bij twijfel (geen enkele indicator gevonden) blijft de standaardwaarde
+  altijd **"Herstelling"** — de gebruiker kan dit nog altijd manueel
+  aanpassen via de dropdown vóór de WO aangemaakt wordt.
+- Deze inschatting geldt voor alle rapportformaten (Fresenius, B.Braun,
+  Nipro, ...), niet enkel de firma's waarvoor voorheen een vast type
+  gehardcode stond.
+
