@@ -850,9 +850,15 @@ async def afwerk_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
                 await page.click("#UZ_ATTACH_WRK_UZ_ATTACH_ADD")
                 await asyncio.sleep(2)
 
-                upload_modal = next((f for f in page.frames if f.name == "ptModFrame_0"), None)
+                # PeopleSoft geeft elke volgende popup een oplopende naam
+                # (ptModFrame_0, ptModFrame_1, ...) — dus niet hardcoden op
+                # _0, maar het laatst geopende ptModFrame_N-frame nemen.
+                modal_frames = [f for f in page.frames if f.name and re.match(r"^ptModFrame_\d+$", f.name)]
+                upload_modal = modal_frames[-1] if modal_frames else None
                 if not upload_modal:
-                    log("Stap 8b: ❌ Upload modal niet gevonden — bijlage overgeslagen")
+                    beschikbaar = [f.name or "(leeg)" for f in page.frames]
+                    log(f"Stap 8b: ❌ Upload modal niet gevonden — bijlage overgeslagen "
+                        f"(beschikbare frames: {beschikbaar})")
                 else:
                     await asyncio.sleep(1)
                     file_input = await upload_modal.query_selector("input[type='file']")

@@ -54,3 +54,11 @@ historiek).
   Nipro, ...), niet enkel de firma's waarvoor voorheen een vast type
   gehardcode stond.
 
+### Genius-staalnameresultaten — PDF-bijlage upload gefixt
+- Fix: dezelfde `ptModFrame_0`-hardcoding als bij de service rapporten zat
+  ook in `dialyse_resultaten.py` (`afwerk_wo_voor_staal`), waardoor het
+  analyseverslag (PDF) niet werd opgeladen bij de WO en de daaropvolgende
+  stap ("commentaarveld") in timeout liep doordat de niet-gesloten popup de
+  pagina blokkeerde. De popup-iframe wordt nu net als bij de service
+  rapporten dynamisch opgezocht (`ptModFrame_N`).
+
