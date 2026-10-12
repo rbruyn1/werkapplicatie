@@ -5,6 +5,21 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-10-12
+
+### RO-resultaten — keuze bij meerdere gevonden werkorders
+- Bij "WO opzoeken" op de RO-resultaten werd altijd stilzwijgend de eerste
+  gevonden WO genomen. Worden er meerdere WO's gevonden, dan verschijnt nu een
+  popup met alle opties (WO-nummer, status, omschrijving) om de juiste te
+  kiezen. INUITV-WO's staan in het groen.
+- "Later kiezen" slaat het staal over; via de knop **⚠ Kies WO (n)** in de
+  WO-kolom kan alsnog gekozen worden. Zolang de keuze openstaat wordt het staal
+  bij verzenden overgeslagen met de melding "WO-keuze nog te maken".
+- Nieuwe route `POST /api/ro-resultaten/wo-keuze`; de gekozen WO moet bij de
+  opgeslagen opties van dat staal horen.
+- Enkel de RO-flow is aangepast; de dialyse-/TD-stalen nemen nog steeds de
+  eerste rij.
+
 ## 2026-09-17
 
 ### Service rapporten — bestaande PO-werkorder herkennen

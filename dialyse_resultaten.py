@@ -492,10 +492,38 @@ async def verwerk_pdf_stalen(pdf_paden: list[str], stap_log=None) -> list[dict]:
 
 # ── WO opzoeken voor één staal ───────────────────────────────────────────────
 
-async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
+async def _lees_wo_rijen(page, log=None, max_rijen: int = 50) -> list[dict]:
+    """Lees alle rijen uit het WO-zoekresultaat (wo_id, status, omschrijving)."""
+    rijen: list[dict] = []
+    gezien: set[str] = set()
+    for rij in range(max_rijen):
+        cel = await page.query_selector(f"#UZFM_WO_ZK_UZ_OMSCHR254\\${rij}")
+        if not cel:
+            break
+        try:
+            rid     = (await page.locator(f"#UZ_WO_ID\\${rij}").inner_text(timeout=3_000)).strip()
+            rstatus = (await page.locator(f"#UZFM_WO_ZK_UZ_WO_STATUS\\${rij}").inner_text(timeout=3_000)).strip()
+            romschr = (await page.locator(f"#UZFM_WO_ZK_UZ_OMSCHR254\\${rij}").inner_text(timeout=3_000)).strip()
+        except Exception as e:
+            if log:
+                log(f"Stap 7: Rij {rij} niet leesbaar: {e}")
+            break
+        if rid and rid not in gezien:
+            gezien.add(rid)
+            rijen.append({"wo_id": rid, "status": rstatus, "omschrijving": romschr})
+            if log:
+                log(f"Stap 7: Rij {rij}: WO {rid} — {rstatus} — {romschr}")
+    return rijen
+
+
+async def zoek_wo_voor_staal(page, staal: dict, stap_log=None, alle_rijen: bool = False) -> dict:
     """
     Zoek de werkorder op in PeopleSoft op basis van T-nummer en staalnamedatum.
     Geeft terug: {"wo_id": ..., "status": ..., "ok": bool, "fout": ...}
+
+    alle_rijen=True: lees alle gevonden WO's. Bij meer dan één WO wordt GEEN keuze
+    gemaakt maar komt {"keuze_nodig": True, "wo_opties": [...]} terug, zodat de
+    gebruiker in de UI kan kiezen. Standaard (False) wordt rij 0 genomen.
     """
 
     def log(msg):
@@ -601,6 +629,7 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
         log("Stap 7: Wachten op zoekresultaten...")
         wo_id    = None
         wo_status = None
+        wo_opties: list[dict] = []
         for poging in range(10):
             await asyncio.sleep(3)
             aanwezig = await page.query_selector("#UZFM_WO_ZK_UZ_OMSCHR254\\$0")
@@ -611,6 +640,8 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
                     log(f"Stap 7: ✓ WO gevonden: {wo_id} — status: {wo_status}")
                 except Exception as e:
                     log(f"Stap 7: Resultaat niet leesbaar: {e}")
+                if alle_rijen:
+                    wo_opties = await _lees_wo_rijen(page, log)
                 break
             log(f"Stap 7: Nog geen resultaat (poging {poging+1}/10)...")
         else:
@@ -623,6 +654,12 @@ async def zoek_wo_voor_staal(page, staal: dict, stap_log=None) -> dict:
             return {"ok": False, "wo_id": None, "status": None,
                     "fout": "WO-element gevonden maar nummer leeg",
                     "maximo": maximo, "datum": datum_str}
+
+        if alle_rijen and len(wo_opties) > 1:
+            log(f"Stap 7: ⚠ {len(wo_opties)} WO's gevonden — keuze vereist")
+            return {"ok": True, "wo_id": None, "status": None, "fout": None,
+                    "maximo": maximo, "datum": datum_str,
+                    "keuze_nodig": True, "wo_opties": wo_opties}
 
         return {"ok": True, "wo_id": wo_id, "status": wo_status,
                 "fout": None, "maximo": maximo, "datum": datum_str}
@@ -1669,8 +1706,9 @@ async def zoek_werkorders_ro(stalen: list[dict], stap_log=None) -> list[dict]:
 
                 # Bouw een tijdelijk staal-dict compatibel met zoek_wo_voor_staal
                 staal_td = {**staal, "detail": staal.get("locatie", "")}
-                res = await zoek_wo_voor_staal(page, staal_td, stap_log=s_log)
-                resultaten.append({**staal, **res})
+                res = await zoek_wo_voor_staal(page, staal_td, stap_log=s_log, alle_rijen=True)
+                # Oude keuze-opties altijd wissen; res overschrijft indien opnieuw nodig
+                resultaten.append({**staal, "keuze_nodig": False, "wo_opties": [], **res})
                 await asyncio.sleep(1)
         finally:
             log("Browser afsluiten...")
@@ -1710,7 +1748,10 @@ async def verzend_resultaten_ro(stalen: list[dict], stap_log=None) -> list[dict]
 
             log(f"  {len(te_verzenden)} te verzenden, {len(overgeslagen)} overgeslagen")
             for s in overgeslagen:
-                reden = "Geen WO" if not s.get("wo_id") else f"Status = {s.get('status','?')}"
+                if s.get("wo_opties") and not s.get("wo_id"):
+                    reden = "WO-keuze nog te maken"
+                else:
+                    reden = "Geen WO" if not s.get("wo_id") else f"Status = {s.get('status','?')}"
                 log(f"  ↷ Overgeslagen: {s.get('maximo','?')} — {reden}")
                 resultaten.append({**s, "ok": False, "melding": reden, "fout": reden})
 

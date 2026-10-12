@@ -1675,6 +1675,35 @@ def api_ro_res_wo_opzoeken():
     return jsonify({"ok": True, "job_id": job_id})
 
 
+@app.route("/api/ro-resultaten/wo-keuze", methods=["POST"])
+def api_ro_res_wo_keuze():
+    """Sla de gekozen WO op wanneer er meerdere WO's gevonden werden voor een RO-staal."""
+    payload = request.get_json(force=True)
+    maximo  = payload.get("maximo")
+    datum   = payload.get("datum")
+    wo_id   = payload.get("wo_id")
+
+    if not maximo or not datum or not wo_id:
+        return jsonify({"ok": False, "fout": "maximo, datum en wo_id zijn verplicht"}), 400
+
+    data  = ro_res_lees()
+    staal = next((s for s in data.get("stalen", [])
+                  if s.get("maximo") == maximo and s.get("datum") == datum), None)
+    if not staal:
+        return jsonify({"ok": False, "fout": "Staal niet gevonden"}), 404
+
+    optie = next((o for o in staal.get("wo_opties", []) if o.get("wo_id") == wo_id), None)
+    if not optie:
+        return jsonify({"ok": False, "fout": f"WO {wo_id} is geen geldige keuze voor dit staal"}), 400
+
+    staal["wo_id"]       = optie["wo_id"]
+    staal["status"]      = optie["status"]
+    staal["keuze_nodig"] = False
+    staal["wo_opties"]   = []
+    ro_res_sla_op(data)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/ro-resultaten/verzenden", methods=["POST"])
 def api_ro_res_verzenden():
     payload       = request.get_json(force=True)

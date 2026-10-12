@@ -591,6 +591,15 @@
   </div>
 </div>
 
+<div id="ro-overlay-wo-keuze" style="position: fixed; inset: 0; background: rgba(10,15,30,.6); display: none; align-items: center; justify-content: center; z-index: 2000;">
+  <div style="background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 24px 28px; min-width: 420px; max-width: 680px; width: 92%; box-shadow: 0 8px 32px rgba(0,0,0,.2);">
+    <h3 style="font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px;">Meerdere WO's gevonden</h3>
+    <p id="ro-keuze-label" style="font-size: 13px; color: var(--muted); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border);"></p>
+    <div id="ro-keuze-opties" style="display: grid; gap: 8px; margin-bottom: 20px; max-height: 50vh; overflow-y: auto;"></div>
+    <button class="btn btn-outline btn-sm" onclick="roSluitKeuze()">Later kiezen</button>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════════════════
 // State
@@ -1323,7 +1332,9 @@ function roRenderTabel() {
       <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.endotoxine_begin)}">${s.endotoxine_begin || ""}</td>
       <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.kiemgetal_einde)}">${s.kiemgetal_einde || ""}</td>
       <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.endotoxine_einde)}">${s.endotoxine_einde || ""}</td>
-      <td style="font-family:var(--mono);font-size:12px">${s.wo_id || "—"}</td>
+      <td style="font-family:var(--mono);font-size:12px">${(s.wo_opties && s.wo_opties.length > 1)
+        ? `<button class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="roOpenKeuze('${key}')">⚠ Kies WO (${s.wo_opties.length})</button>`
+        : (s.wo_id || "—")}</td>
       <td style="font-family:var(--mono);font-size:12px;color:${statusKleur}">${s.status || "—"}</td>
       <td style="text-align:center;color:${statusKleur}">${okIco}</td>
       <td><button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="roVerwijderStaal('${s.maximo}','${s.datum}')">🗑</button></td>
@@ -1438,6 +1449,68 @@ async function pollRoJob(job_id, logIndex, type) {
   document.getElementById("voortgang-status").textContent = `Klaar: ${ok} OK, ${fout} mislukt`;
   debugLog(`RO job klaar: ${ok} OK, ${fout} mislukt`, ok > 0 && fout === 0 ? "ok" : fout > 0 ? "warn" : "info");
   await roLaadData();
+  if (type === "opzoeken") roStartKeuzeWachtrij();
+}
+
+// ── Keuze bij meerdere gevonden WO's ─────────────────────────────────────────
+let _roKeuzeWachtrij = [];
+let _roKeuzeHuidig = null;
+
+function roStartKeuzeWachtrij() {
+  _roKeuzeWachtrij = _roStalen
+    .filter(s => s.wo_opties && s.wo_opties.length > 1)
+    .map(s => s.maximo + "|" + s.datum);
+  roVolgendeKeuze();
+}
+
+function roVolgendeKeuze() {
+  if (!_roKeuzeWachtrij.length) { roSluitKeuze(false); return; }
+  roOpenKeuze(_roKeuzeWachtrij[0]);
+}
+
+function roOpenKeuze(key) {
+  const staal = _roStalen.find(s => s.maximo + "|" + s.datum === key);
+  if (!staal || !staal.wo_opties || !staal.wo_opties.length) return;
+  _roKeuzeHuidig = staal;
+
+  document.getElementById("ro-keuze-label").textContent =
+    `${staal.eenheid || ""} ${staal.locatie || ""} — ${staal.maximo} (${staal.datum}) — kies de juiste werkorder:`;
+
+  document.getElementById("ro-keuze-opties").innerHTML = staal.wo_opties.map((opt, i) => `
+    <button class="btn btn-outline" style="text-align:left;padding:10px 14px;display:flex;gap:16px;align-items:center"
+      onclick="roKiesWO(${i})">
+      <span style="font-family:var(--mono);font-weight:700;color:var(--accent);min-width:90px">${escHtml(opt.wo_id)}</span>
+      <span style="font-family:var(--mono);font-size:12px;min-width:70px;color:${opt.status === "INUITV" ? "var(--green)" : "var(--muted)"}">${escHtml(opt.status || "")}</span>
+      <span style="font-size:12px;flex:1">${escHtml(opt.omschrijving || "")}</span>
+    </button>`).join("");
+
+  document.getElementById("ro-overlay-wo-keuze").style.display = "flex";
+}
+
+async function roKiesWO(index) {
+  const staal = _roKeuzeHuidig;
+  const opt   = staal && staal.wo_opties[index];
+  if (!opt) return;
+  const r = await fetch("/api/ro-resultaten/wo-keuze", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({maximo: staal.maximo, datum: staal.datum, wo_id: opt.wo_id}),
+  }).then(r => r.json());
+  if (!r.ok) { alert(r.fout || "Keuze opslaan mislukt"); return; }
+
+  document.getElementById("ro-overlay-wo-keuze").style.display = "none";
+  _roKeuzeWachtrij.shift();
+  await roLaadData();
+  setTimeout(roVolgendeKeuze, 200);
+}
+
+// Popup sluiten: "Later kiezen" slaat dit staal over; de keuze kan later via de knop in de tabel
+function roSluitKeuze(shift = true) {
+  document.getElementById("ro-overlay-wo-keuze").style.display = "none";
+  if (shift && _roKeuzeWachtrij.length) {
+    _roKeuzeWachtrij.shift();
+    setTimeout(roVolgendeKeuze, 200);
+  }
 }
 
 async function roVerwijderStaal(maximo, datum) {
