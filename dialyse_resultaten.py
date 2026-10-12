@@ -478,7 +478,7 @@ async def verwerk_pdf_stalen(pdf_paden: list[str], stap_log=None) -> list[dict]:
                     "bestandsnaam": bestandsnaam,
                 }
 
-                wo_res = await zoek_wo_voor_staal(page, staal, stap_log=s_log)
+                wo_res = await zoek_wo_voor_staal(page, staal, stap_log=s_log, alle_rijen=True)
                 staal.update(wo_res)
                 resultaten.append(staal)
                 await asyncio.sleep(1)
@@ -1087,7 +1087,7 @@ async def zoek_werkorders(stalen: list[dict], stap_log=None) -> list[dict]:
                         stap_log(lbl)
 
                 try:
-                    res = await zoek_wo_voor_staal(page, staal, stap_log=s_log)
+                    res = await zoek_wo_voor_staal(page, staal, stap_log=s_log, alle_rijen=True)
                 except Exception as exc:
                     import traceback
                     tb = traceback.format_exc()
@@ -1095,7 +1095,7 @@ async def zoek_werkorders(stalen: list[dict], stap_log=None) -> list[dict]:
                     for r in tb.splitlines():
                         log(f"  {r}")
                     res = {"ok": False, "wo_id": None, "status": None, "fout": str(exc)}
-                resultaten.append({**staal, **res})
+                resultaten.append({**staal, "keuze_nodig": False, "wo_opties": [], **res})
                 await asyncio.sleep(1)
 
         finally:
@@ -1143,7 +1143,10 @@ async def verzend_resultaten(stalen: list[dict], stap_log=None) -> list[dict]:
 
             log(f"  {len(te_verzenden)} te verzenden, {len(overgeslagen)} overgeslagen")
             for s in overgeslagen:
-                reden = "Geen WO" if not s.get("wo_id") else f"Status = {s.get('status','?')}"
+                if s.get("wo_opties") and not s.get("wo_id"):
+                    reden = "WO-keuze nog te maken"
+                else:
+                    reden = "Geen WO" if not s.get("wo_id") else f"Status = {s.get('status','?')}"
                 log(f"  ↷ Overgeslagen: {s.get('maximo','?')} — {reden}")
                 resultaten.append({**s, "ok": False, "melding": reden, "fout": reden})
 

@@ -596,7 +596,7 @@
     <h3 style="font-family: var(--mono); font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px;">Meerdere WO's gevonden</h3>
     <p id="ro-keuze-label" style="font-size: 13px; color: var(--muted); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border);"></p>
     <div id="ro-keuze-opties" style="display: grid; gap: 8px; margin-bottom: 20px; max-height: 50vh; overflow-y: auto;"></div>
-    <button class="btn btn-outline btn-sm" onclick="roSluitKeuze()">Later kiezen</button>
+    <button class="btn btn-outline btn-sm" onclick="keuzeSluit()">Later kiezen</button>
   </div>
 </div>
 
@@ -762,7 +762,9 @@ function renderTabel() {
   tbody.innerHTML = alleStalen.map(s => {
     const k      = sleutel(s);
     const gecbx  = geselecteerd.has(k);
-    const woLink = (s.wo_id && s.wo_id !== 'nvt')
+    const woLink = (s.wo_opties && s.wo_opties.length > 1)
+      ? `<button class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="keuzeKlik('td','${escHtml(k)}')">⚠ Kies WO (${s.wo_opties.length})</button>`
+      : (s.wo_id && s.wo_id !== 'nvt')
       ? `<a class="wo-link" href="#" onclick="openWO('${s.wo_id}');return false">${escHtml(s.wo_id)}</a>`
       : (s.wo_id === 'nvt' ? '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">—</span>' : '<span style="color:var(--muted);font-family:var(--mono);font-size:12px">niet opgezocht</span>');
 
@@ -961,6 +963,7 @@ async function verwerkPdfStalen() {
         else statusEl.textContent += '\n✓ Klaar — resultaten staan nu bij de stalen (status INUITV indien gevonden)';
         await laadData();
         await laadPdfStalen();
+        keuzeStartWachtrij('td', job.resultaten);
       }
     }, 2000);
   } catch (e) {
@@ -1108,6 +1111,9 @@ async function pollJob(job_id, logIndex, type) {
   if (_vorigeTab && !_vorigeTab.classList.contains('active')) {
     _vorigeTab.click();
   }
+
+  // Meerdere WO's gevonden? Laat de gebruiker de juiste kiezen
+  if (type === 'wo-opzoeken') keuzeStartWachtrij('td', data.resultaten);
 }
 
 function renderVoortgang(data, type) {
@@ -1334,7 +1340,7 @@ function roRenderTabel() {
       <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.kiemgetal_einde)}">${s.kiemgetal_einde || ""}</td>
       <td style="font-family:var(--mono);font-size:12px;${_roKleur(s.endotoxine_einde)}">${s.endotoxine_einde || ""}</td>
       <td style="font-family:var(--mono);font-size:12px">${(s.wo_opties && s.wo_opties.length > 1)
-        ? `<button class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="roOpenKeuze('${key}')">⚠ Kies WO (${s.wo_opties.length})</button>`
+        ? `<button class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="keuzeKlik('ro','${key}')">⚠ Kies WO (${s.wo_opties.length})</button>`
         : (s.wo_id || "—")}</td>
       <td style="font-family:var(--mono);font-size:12px;color:${statusKleur}">${s.status || "—"}</td>
       <td style="text-align:center;color:${statusKleur}">${okIco}</td>
@@ -1450,36 +1456,53 @@ async function pollRoJob(job_id, logIndex, type) {
   document.getElementById("voortgang-status").textContent = `Klaar: ${ok} OK, ${fout} mislukt`;
   debugLog(`RO job klaar: ${ok} OK, ${fout} mislukt`, ok > 0 && fout === 0 ? "ok" : fout > 0 ? "warn" : "info");
   await roLaadData();
-  if (type === "opzoeken") roStartKeuzeWachtrij();
+  if (type === "opzoeken") keuzeStartWachtrij("ro", data.resultaten);
 }
 
-// ── Keuze bij meerdere gevonden WO's ─────────────────────────────────────────
-let _roKeuzeWachtrij = [];
-let _roKeuzeHuidig = null;
+// ── Keuze bij meerdere gevonden WO's (RO + TD) ───────────────────────────────
+const KEUZE_BRON = {
+  ro: { stalen: () => _roStalen,  url: "/api/ro-resultaten/wo-keuze",       herlaad: () => roLaadData() },
+  td: { stalen: () => alleStalen, url: "/api/dialyse-resultaten/wo-keuze",  herlaad: () => laadData() },
+};
+let _keuzeBron = "ro";
+let _keuzeWachtrij = [];
+let _keuzeHuidig = null;
 
-function roStartKeuzeWachtrij() {
-  _roKeuzeWachtrij = _roStalen
+// Na een zoekjob: enkel stalen uit die job met meerdere WO's (resultaten optioneel)
+function keuzeStartWachtrij(bron, resultaten) {
+  _keuzeBron = bron;
+  const sleutels = resultaten ? new Set(resultaten.map(r => r.maximo + "|" + r.datum)) : null;
+  _keuzeWachtrij = KEUZE_BRON[bron].stalen()
     .filter(s => s.wo_opties && s.wo_opties.length > 1)
-    .map(s => s.maximo + "|" + s.datum);
-  roVolgendeKeuze();
+    .map(s => s.maximo + "|" + s.datum)
+    .filter(key => !sleutels || sleutels.has(key));
+  keuzeVolgende();
 }
 
-function roVolgendeKeuze() {
-  if (!_roKeuzeWachtrij.length) { roSluitKeuze(false); return; }
-  roOpenKeuze(_roKeuzeWachtrij[0]);
+function keuzeVolgende() {
+  if (!_keuzeWachtrij.length) { keuzeSluit(false); return; }
+  keuzeOpen(_keuzeBron, _keuzeWachtrij[0]);
 }
 
-function roOpenKeuze(key) {
-  const staal = _roStalen.find(s => s.maximo + "|" + s.datum === key);
-  if (!staal || !staal.wo_opties || !staal.wo_opties.length) return;
-  _roKeuzeHuidig = staal;
+// Handmatig via de knop in de tabel: enkel dit ene staal
+function keuzeKlik(bron, key) {
+  _keuzeBron = bron;
+  _keuzeWachtrij = [key];
+  keuzeOpen(bron, key);
+}
+
+function keuzeOpen(bron, key) {
+  const staal = KEUZE_BRON[bron].stalen().find(s => s.maximo + "|" + s.datum === key);
+  if (!staal || !staal.wo_opties || !staal.wo_opties.length) { keuzeSluit(); return; }
+  _keuzeBron = bron;
+  _keuzeHuidig = staal;
 
   document.getElementById("ro-keuze-label").textContent =
-    `${staal.eenheid || ""} ${staal.locatie || ""} — ${staal.maximo} (${staal.datum}) — kies de juiste werkorder:`;
+    `${staal.eenheid || ""} ${staal.locatie || staal.detail || ""} — ${staal.maximo} (${staal.datum}) — kies de juiste werkorder:`;
 
   document.getElementById("ro-keuze-opties").innerHTML = staal.wo_opties.map((opt, i) => `
     <button class="btn btn-outline" style="text-align:left;padding:10px 14px;display:flex;gap:16px;align-items:center"
-      onclick="roKiesWO(${i})">
+      onclick="keuzeKies(${i})">
       <span style="font-family:var(--mono);font-weight:700;color:var(--accent);min-width:90px">${escHtml(opt.wo_id)}</span>
       <span style="font-family:var(--mono);font-size:12px;min-width:70px;color:${opt.status === "INUITV" ? "var(--green)" : "var(--muted)"}">${escHtml(opt.status || "")}</span>
       <span style="font-size:12px;flex:1">${escHtml(opt.omschrijving || "")}</span>
@@ -1488,11 +1511,12 @@ function roOpenKeuze(key) {
   document.getElementById("ro-overlay-wo-keuze").style.display = "flex";
 }
 
-async function roKiesWO(index) {
-  const staal = _roKeuzeHuidig;
+async function keuzeKies(index) {
+  const staal = _keuzeHuidig;
   const opt   = staal && staal.wo_opties[index];
   if (!opt) return;
-  const r = await fetch("/api/ro-resultaten/wo-keuze", {
+  const bron = KEUZE_BRON[_keuzeBron];
+  const r = await fetch(bron.url, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({maximo: staal.maximo, datum: staal.datum, wo_id: opt.wo_id}),
@@ -1500,17 +1524,17 @@ async function roKiesWO(index) {
   if (!r.ok) { alert(r.fout || "Keuze opslaan mislukt"); return; }
 
   document.getElementById("ro-overlay-wo-keuze").style.display = "none";
-  _roKeuzeWachtrij.shift();
-  await roLaadData();
-  setTimeout(roVolgendeKeuze, 200);
+  _keuzeWachtrij.shift();
+  await bron.herlaad();
+  setTimeout(keuzeVolgende, 200);
 }
 
-// Popup sluiten: "Later kiezen" slaat dit staal over; de keuze kan later via de knop in de tabel
-function roSluitKeuze(shift = true) {
+// "Later kiezen" slaat dit staal over; de keuze kan later via de knop in de tabel
+function keuzeSluit(shift = true) {
   document.getElementById("ro-overlay-wo-keuze").style.display = "none";
-  if (shift && _roKeuzeWachtrij.length) {
-    _roKeuzeWachtrij.shift();
-    setTimeout(roVolgendeKeuze, 200);
+  if (shift && _keuzeWachtrij.length) {
+    _keuzeWachtrij.shift();
+    setTimeout(keuzeVolgende, 200);
   }
 }
 

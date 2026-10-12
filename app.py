@@ -1687,9 +1687,8 @@ def api_ro_res_wo_opzoeken():
     return jsonify({"ok": True, "job_id": job_id})
 
 
-@app.route("/api/ro-resultaten/wo-keuze", methods=["POST"])
-def api_ro_res_wo_keuze():
-    """Sla de gekozen WO op wanneer er meerdere WO's gevonden werden voor een RO-staal."""
+def _pas_wo_keuze_toe(data: dict):
+    """Zet de gekozen WO op een staal (RO of TD). Geeft (response, statuscode) terug."""
     payload = request.get_json(force=True)
     maximo  = payload.get("maximo")
     datum   = payload.get("datum")
@@ -1698,7 +1697,6 @@ def api_ro_res_wo_keuze():
     if not maximo or not datum or not wo_id:
         return jsonify({"ok": False, "fout": "maximo, datum en wo_id zijn verplicht"}), 400
 
-    data  = ro_res_lees()
     staal = next((s for s in data.get("stalen", [])
                   if s.get("maximo") == maximo and s.get("datum") == datum), None)
     if not staal:
@@ -1712,7 +1710,28 @@ def api_ro_res_wo_keuze():
     staal["status"]      = optie["status"]
     staal["keuze_nodig"] = False
     staal["wo_opties"]   = []
+    return None
+
+
+@app.route("/api/ro-resultaten/wo-keuze", methods=["POST"])
+def api_ro_res_wo_keuze():
+    """Sla de gekozen WO op wanneer er meerdere WO's gevonden werden voor een RO-staal."""
+    data = ro_res_lees()
+    fout = _pas_wo_keuze_toe(data)
+    if fout:
+        return fout
     ro_res_sla_op(data)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/dialyse-resultaten/wo-keuze", methods=["POST"])
+def api_dr_wo_keuze():
+    """Sla de gekozen WO op wanneer er meerdere WO's gevonden werden voor een TD-staal."""
+    data = dr_lees()
+    fout = _pas_wo_keuze_toe(data)
+    if fout:
+        return fout
+    dr_sla_op(data)
     return jsonify({"ok": True})
 
 

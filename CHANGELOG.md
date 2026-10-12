@@ -17,8 +17,18 @@ historiek).
   bij verzenden overgeslagen met de melding "WO-keuze nog te maken".
 - Nieuwe route `POST /api/ro-resultaten/wo-keuze`; de gekozen WO moet bij de
   opgeslagen opties van dat staal horen.
-- Enkel de RO-flow is aangepast; de dialyse-/TD-stalen nemen nog steeds de
-  eerste rij.
+- Zelfde keuze nu ook voor de TD-stalen (zie hieronder).
+
+### TD-resultaten — keuze bij meerdere gevonden werkorders
+- Ook bij de TD-stalen (zowel "WO opzoeken" als het verwerken van PDF-stalen)
+  wordt niet langer stilzwijgend de eerste WO genomen: bij meerdere WO's komt
+  dezelfde popup als bij RO, met de knop **⚠ Kies WO (n)** in de WO-kolom.
+- De popup toont enkel stalen uit de lopende zoekjob, zodat een eerder
+  overgeslagen keuze niet bij elke nieuwe zoekopdracht terugkomt.
+- Nieuwe route `POST /api/dialyse-resultaten/wo-keuze`; RO en TD delen de
+  validatie (gekozen WO moet bij de opgeslagen opties horen).
+- Zonder gemaakte keuze wordt het staal bij verzenden overgeslagen met de
+  melding "WO-keuze nog te maken".
 
 ### TD-resultaten — "WO opzoeken selectie" zocht alle stalen op
 - De route negeerde de selectie en zocht steeds alle stalen op. Nu worden enkel
