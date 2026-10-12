@@ -20,6 +20,13 @@ historiek).
 - Enkel de RO-flow is aangepast; de dialyse-/TD-stalen nemen nog steeds de
   eerste rij.
 
+### TD-resultaten — "WO opzoeken selectie" zocht alle stalen op
+- De route negeerde de selectie en zocht steeds alle stalen op. Nu worden enkel
+  de geselecteerde stalen opgezocht; de overige stalen blijven ongewijzigd
+  bewaard (voorheen zou de lijst vervangen worden door enkel de gezochte).
+- De knop doet niets meer als er niets geselecteerd is, i.p.v. stilzwijgend alles
+  op te zoeken. De knop "WO opzoeken" (alles) blijft ongewijzigd.
+
 ## 2026-09-17
 
 ### Service rapporten — bestaande PO-werkorder herkennen

@@ -1008,6 +1008,7 @@ async function woOpzoeken() {
 }
 
 async function woOpzoekenSelectie() {
+  if (!geselecteerd.size) return;  // nooit stilzwijgend alles opzoeken
   startJob('wo-opzoeken', [...geselecteerd]);
 }
 

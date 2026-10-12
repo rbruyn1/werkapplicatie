@@ -1459,10 +1459,20 @@ def api_dr_alles_wissen():
 
 @app.route("/api/dialyse-resultaten/wo-opzoeken", methods=["POST"])
 def api_dr_wo_opzoeken():
-    data   = dr_lees()
-    stalen = data.get("stalen", [])
+    payload  = request.get_json(silent=True) or {}
+    selectie = set(payload.get("selectie") or [])
+    data     = dr_lees()
+    stalen   = data.get("stalen", [])
     if not stalen:
         return jsonify({"ok": False, "fout": "Geen stalen geladen"}), 400
+
+    # Enkel de geselecteerde stalen opzoeken (zonder selectie: alle stalen)
+    if selectie:
+        te_zoeken = [s for s in stalen if (s["maximo"] + "|" + s["datum"]) in selectie]
+        if not te_zoeken:
+            return jsonify({"ok": False, "fout": "Geselecteerde stalen niet gevonden"}), 400
+    else:
+        te_zoeken = stalen
 
     import time
     job_id = str(int(time.time() * 1000))
@@ -1476,9 +1486,11 @@ def api_dr_wo_opzoeken():
     def _run():
         from dialyse_resultaten import zoek_werkorders
         try:
-            resultaten     = asyncio.run(zoek_werkorders(stalen, stap_log=_stap_log))
+            resultaten     = asyncio.run(zoek_werkorders(te_zoeken, stap_log=_stap_log))
             job["resultaten"] = resultaten
-            data["stalen"] = resultaten
+            # Merge terug in de volledige lijst: niet-gezochte stalen blijven ongewijzigd
+            res_map        = {r["maximo"] + "|" + r["datum"]: r for r in resultaten}
+            data["stalen"] = [res_map.get(s["maximo"] + "|" + s["datum"], s) for s in stalen]
             dr_sla_op(data)
         except Exception as e:
             job["fout"] = str(e)
