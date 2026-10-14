@@ -17,6 +17,24 @@ import tempfile
 from pathlib import Path
 
 # ──────────────────────────────────────────────────────────────────
+# Supervisor: start de echte app als kindproces en blijft zelf in de
+# voorgrond van de console staan. Na een update sluit het kindproces af met
+# exitcode 75 en start de supervisor meteen een verse instantie (nieuwe code,
+# zelfde console, poort vrij). os.execv doet dat niet op Windows: daar geeft
+# PowerShell dan meteen de prompt terug terwijl de app op de achtergrond doorloopt.
+# Gestart via start.py (zet WO_SUPERVISED zelf) wordt er niet dubbel gesupervised.
+# ──────────────────────────────────────────────────────────────────
+if __name__ == "__main__" and not os.environ.get("WO_SUPERVISED"):
+    _sv_env = dict(os.environ, WO_SUPERVISED="1")
+    while True:
+        try:
+            _sv_rc = subprocess.call([sys.executable] + sys.argv, env=_sv_env)
+        except KeyboardInterrupt:
+            sys.exit(0)
+        if _sv_rc != 75:
+            sys.exit(_sv_rc)
+
+# ──────────────────────────────────────────────────────────────────
 # Zorg dat vereiste packages aanwezig zijn (auto-install indien nodig)
 # ──────────────────────────────────────────────────────────────────
 def _ensure_packages():
@@ -578,6 +596,10 @@ def _herstart_zelf():
         verwijder_lock()
     except Exception:
         pass
+    if os.environ.get("WO_SUPERVISED"):
+        # De supervisor (of start.py) start meteen een verse instantie.
+        log.info("Herstart nu na update (exitcode 75)...")
+        os._exit(75)
     log.info("Herstart nu na update (os.execv)...")
     python = sys.executable
     os.execv(python, [python] + sys.argv)

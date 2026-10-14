@@ -24,6 +24,7 @@ Genegeerd (triggeren nooit een herstart):
   - De mappen:            logs/, __pycache__/, uploads/
 """
 
+import os
 import sys
 import time
 import threading
@@ -150,6 +151,7 @@ def run():
         process[0]    = subprocess.Popen(
             [sys.executable, str(WATCH_DIR / "app.py")],
             cwd=str(WATCH_DIR),
+            env=dict(os.environ, WO_SUPERVISED="1"),  # start.py is zelf de supervisor
         )
         gestart_op[0] = time.time()
 
