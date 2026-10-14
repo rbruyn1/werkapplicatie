@@ -47,13 +47,31 @@ def _ensure_packages():
 
 _ensure_packages()
 
-# Tesseract-OCR is geen pip-pakket (apart via winget, zie installeer.ps1) en
-# kan dus niet door _ensure_packages() geinstalleerd worden — enkel waarschuwen.
+# Tesseract-OCR is geen pip-pakket en kan dus niet via _ensure_packages()
+# (pip) geinstalleerd worden, maar wel automatisch via winget - zodat
+# collega's hier zelf niets voor hoeven te doen of uit te leggen krijgen.
 import shutil
 if not shutil.which("tesseract"):
-    print("WAARSCHUWING: Tesseract OCR niet gevonden - OCR-terugval voor "
-          "onleesbare PDF's (service rapporten) werkt dan niet. "
-          "Installeer via: winget install --id UB-Mannheim.TesseractOCR")
+    print("Tesseract OCR niet gevonden - wordt automatisch geinstalleerd via winget...")
+    try:
+        subprocess.run(
+            ["winget", "install", "--id", "UB-Mannheim.TesseractOCR",
+             "--silent", "--accept-package-agreements", "--accept-source-agreements"],
+            check=False,
+        )
+        # PATH binnen dit proces verversen zodat tesseract meteen bruikbaar is
+        # zonder dat de app herstart moet worden.
+        os.environ["Path"] = (
+            os.environ.get("Path", "")
+            + r";C:\Program Files\Tesseract-OCR"
+        )
+    except Exception as e:
+        print(f"WAARSCHUWING: automatische Tesseract-installatie mislukt ({e})")
+
+    if not shutil.which("tesseract"):
+        print("WAARSCHUWING: Tesseract OCR nog steeds niet gevonden - OCR-terugval "
+              "voor onleesbare PDF's (service rapporten) werkt dan niet. "
+              "Installeer handmatig via: winget install --id UB-Mannheim.TesseractOCR")
 
 from flask import Flask, render_template, jsonify, request, redirect, send_from_directory
 from datetime import datetime
