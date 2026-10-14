@@ -5,6 +5,37 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-10-14
+
+### Service rapporten — OCR-terugval (Tesseract) opstarten
+- Tesseract wordt nu ook gevonden als het niet op PATH staat (standaardmap
+  `C:\Program Files\Tesseract-OCR`). Winget draait enkel nog bij een echt
+  ontbrekende installatie, i.p.v. bij elke start.
+- Het Nederlandse taalpakket komt in een eigen map `tessdata\` naast `app.py`
+  (eng + nld) en `TESSDATA_PREFIX` wijst daarheen. Dat werkt zonder
+  adminrechten; voorheen faalde de download met "Permission denied" op
+  `C:\Program Files`. De map staat in `.gitignore`.
+- `fitz` vervangen door `pymupdf` (de oude import gaf bij elke start een
+  waarschuwing). Vereist PyMuPDF 1.24.3 of nieuwer; een oudere versie wordt bij
+  het opstarten automatisch bijgewerkt. De OCR-code valt voor de zekerheid nog
+  terug op `fitz`.
+
+### Herstart na "update nu"
+- Op Windows geeft `os.execv` de PowerShell-prompt meteen terug terwijl de app
+  op de achtergrond doorloopt. Vermoedelijk bleef daardoor een verweesde
+  instantie poort 5000 bezet houden (Werkzeug laat op Windows dubbele binding
+  toe), zodat de herstarte app geen verzoeken kreeg en pas na meerdere
+  handmatige herstarts werkte.
+- `python app.py` start nu eerst een kleine supervisor die de echte app als
+  kindproces draait en in de voorgrond van de console blijft. Na een update
+  sluit de app af met exitcode 75 en start de supervisor meteen een verse
+  instantie (nieuwe code, zelfde console, poort vrij). Ctrl+C stopt alles.
+- `start.py` zet zelf `WO_SUPERVISED`, zodat er niet dubbel gesupervised wordt.
+  Zonder supervisor (andere opstartwijze) blijft de oude `os.execv`-herstart
+  gelden.
+- De eerste herstart naar deze versie verliep nog via de oude code; de nieuwe
+  herstart wordt pas bij de update daarna gebruikt.
+
 ## 2026-10-12
 
 ### RO-resultaten — keuze bij meerdere gevonden werkorders
