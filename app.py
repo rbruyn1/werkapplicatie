@@ -73,6 +73,27 @@ if not shutil.which("tesseract"):
               "voor onleesbare PDF's (service rapporten) werkt dan niet. "
               "Installeer handmatig via: winget install --id UB-Mannheim.TesseractOCR")
 
+# De winget-installatie van Tesseract OCR bevat standaard enkel het Engelse
+# taalpakket. Nederlands wordt hier los bijgehaald (officiele tessdata_fast
+# repo) zodat de OCR-terugval ook Nederlandse tekst goed leest i.p.v. enkel
+# de Engelse fallback te gebruiken (zie wo_service_rapport.py).
+_tess_pad = shutil.which("tesseract")
+if _tess_pad:
+    _tessdata_map = os.path.join(os.path.dirname(_tess_pad), "tessdata")
+    _nld_bestand = os.path.join(_tessdata_map, "nld.traineddata")
+    if os.path.isdir(_tessdata_map) and not os.path.exists(_nld_bestand):
+        print("Nederlands taalpakket voor Tesseract OCR niet gevonden - wordt gedownload...")
+        try:
+            import urllib.request
+            urllib.request.urlretrieve(
+                "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/nld.traineddata",
+                _nld_bestand,
+            )
+            print("Nederlands taalpakket voor Tesseract OCR geinstalleerd")
+        except Exception as e:
+            print(f"WAARSCHUWING: download Nederlands taalpakket mislukt ({e}) - "
+                  "OCR-terugval gebruikt dan enkel Engels")
+
 from flask import Flask, render_template, jsonify, request, redirect, send_from_directory
 from datetime import datetime
 from crypto_utils import encrypt_password
