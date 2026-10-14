@@ -28,6 +28,8 @@ def _ensure_packages():
         "watchdog": "watchdog",
         "dateutil": "python-dateutil",
         "pdfplumber": "pdfplumber",
+        "fitz": "pymupdf",
+        "pytesseract": "pytesseract",
     }
     missing = []
     for module_name, pip_name in required.items():
@@ -44,6 +46,14 @@ def _ensure_packages():
         )
 
 _ensure_packages()
+
+# Tesseract-OCR is geen pip-pakket (apart via winget, zie installeer.ps1) en
+# kan dus niet door _ensure_packages() geinstalleerd worden — enkel waarschuwen.
+import shutil
+if not shutil.which("tesseract"):
+    print("WAARSCHUWING: Tesseract OCR niet gevonden - OCR-terugval voor "
+          "onleesbare PDF's (service rapporten) werkt dan niet. "
+          "Installeer via: winget install --id UB-Mannheim.TesseractOCR")
 
 from flask import Flask, render_template, jsonify, request, redirect, send_from_directory
 from datetime import datetime
