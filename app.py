@@ -46,7 +46,7 @@ def _ensure_packages():
         "watchdog": "watchdog",
         "dateutil": "python-dateutil",
         "pdfplumber": "pdfplumber",
-        "fitz": "pymupdf",
+        "pymupdf": "pymupdf>=1.24.3",   # import-naam pymupdf (fitz is verouderd)
         "pytesseract": "pytesseract",
     }
     missing = []

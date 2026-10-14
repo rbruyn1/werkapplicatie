@@ -256,7 +256,10 @@ def _ocr_pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
     installeer.ps1) en de pakketten PyMuPDF + pytesseract; ontbreken die,
     dan wordt gewoon een lege string teruggegeven (geen harde fout)."""
     try:
-        import fitz  # PyMuPDF
+        try:
+            import pymupdf as fitz  # PyMuPDF >= 1.24.3
+        except ImportError:
+            import fitz  # oudere PyMuPDF
         import pytesseract
     except ImportError:
         log.warning("OCR-terugval niet mogelijk: PyMuPDF/pytesseract niet geinstalleerd")
