@@ -4,5 +4,7 @@ requests
 python-dateutil
 openpyxl
 pdfplumber
+pymupdf
+pytesseract
 watchdog
 cryptography

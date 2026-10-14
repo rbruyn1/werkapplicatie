@@ -64,7 +64,9 @@ $packages = @(
     @{ name = "playwright"; pip = "playwright" },
     @{ name = "openpyxl";   pip = "openpyxl"   },
     @{ name = "watchdog";   pip = "watchdog"    },
-    @{ name = "cryptography"; pip = "cryptography" }
+    @{ name = "cryptography"; pip = "cryptography" },
+    @{ name = "pymupdf";    pip = "pymupdf"    },
+    @{ name = "pytesseract"; pip = "pytesseract" }
 )
 
 foreach ($pkg in $packages) {
@@ -102,6 +104,29 @@ try {
     Schrijf-Info "Probeer handmatig: python -m playwright install chromium"
     Read-Host "Druk Enter om af te sluiten"
     exit 1
+}
+
+# - Stap 4c: Tesseract OCR installeren -------------
+# Nodig als terugval wanneer een PDF (bv. sommige Vantive-exports) een font
+# zonder bruikbare tekenmapping bevat en pdfplumber dus geen leesbare tekst
+# kan halen uit de service rapporten.
+Schrijf-Stap "4/6" "Tesseract OCR installeren (terugval voor onleesbare PDF's)..."
+try {
+    $tesseractOk = $false
+    try {
+        tesseract --version | Out-Null
+        $tesseractOk = $true
+    } catch { $tesseractOk = $false }
+
+    if (-not $tesseractOk) {
+        winget install --id UB-Mannheim.TesseractOCR --silent --accept-package-agreements --accept-source-agreements
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path", "User")
+    }
+    Schrijf-Ok "Tesseract OCR geinstalleerd (incl. Nederlands taalpakket)"
+} catch {
+    Schrijf-Fout "Tesseract OCR-installatie mislukt - OCR-terugval voor onleesbare PDF's werkt dan niet."
+    Schrijf-Info "Installeer handmatig via: winget install --id UB-Mannheim.TesseractOCR"
 }
 
 # - Stap 5: Configuratie + pakketkeuze -------------

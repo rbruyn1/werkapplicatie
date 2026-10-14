@@ -22,6 +22,7 @@ Aanroep vanuit app.py:
 
 import asyncio
 import json
+import logging
 import os
 import re
 import uuid
@@ -30,6 +31,8 @@ from pathlib import Path
 
 import pdfplumber
 from playwright.async_api import async_playwright
+
+log = logging.getLogger(__name__)
 
 # ── Configuratie ─────────────────────────────────────────────────────────────
 
@@ -236,12 +239,62 @@ def sr_verwijder(rapport_id: str):
 
 # ── SN-extractie uit PDF ──────────────────────────────────────────────────────
 
+def _tekst_is_onleesbaar(tekst: str) -> bool:
+    """Sommige PDF's (bv. bepaalde Vantive-exports) bevatten een font zonder
+    bruikbare tekenmapping: pdfplumber geeft dan enkel cid-placeholders of
+    foutief gemapte tekens terug i.p.v. leesbare tekst, waardoor alle
+    sleutelwoord-/regex-herkenning faalt."""
+    if not tekst or tekst.startswith("[PDF LEESFOUT"):
+        return True
+    return tekst.count("(cid:") >= 3
+
+
+def _ocr_pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
+    """Terugvalpoging via OCR voor PDF's met een onleesbare tekenmapping
+    (zie _tekst_is_onleesbaar): rendert elke pagina als afbeelding en leest
+    de tekst met Tesseract. Vereist de Tesseract-OCR-installatie (zie
+    installeer.ps1) en de pakketten PyMuPDF + pytesseract; ontbreken die,
+    dan wordt gewoon een lege string teruggegeven (geen harde fout)."""
+    try:
+        import fitz  # PyMuPDF
+        import pytesseract
+    except ImportError:
+        log.warning("OCR-terugval niet mogelijk: PyMuPDF/pytesseract niet geinstalleerd")
+        return ""
+    tekst = ""
+    try:
+        with fitz.open(str(pdf_pad)) as doc:
+            paginas = doc[:max_paginas] if max_paginas else doc
+            for pagina in paginas:
+                pix = pagina.get_pixmap(dpi=300)
+                from PIL import Image
+                afbeelding = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                # --psm 6 (uniform tekstblok): geeft voor deze "label : waarde"
+                # kolomlayouts een veel betrouwbaardere, regel-voor-regel
+                # leesvolgorde dan Tesseract's automatische paginasegmentatie,
+                # die de linker- en rechterkolom soms als twee losse blokken
+                # leest (eerst alle labels, dan alle waarden).
+                try:
+                    tekst += pytesseract.image_to_string(afbeelding, lang="nld+eng", config="--psm 6") + "\n"
+                except pytesseract.TesseractError:
+                    # "nld" taalbestand niet geinstalleerd -> terugval op Engels
+                    tekst += pytesseract.image_to_string(afbeelding, lang="eng", config="--psm 6") + "\n"
+    except Exception as e:
+        log.warning(f"OCR-terugval mislukt voor {pdf_pad}: {e}")
+        return ""
+    return tekst
+
+
 def _pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
     """Haal tekst op uit een PDF via pdfplumber. Met max_paginas beperkt tot
     de eerste N pagina's - belangrijk voor rapporten met tientallen
     bijgevoegde foto-/datasheet-pagina's (bv. Stryker), waar volledige
     extractie 80+ seconden kan duren terwijl alle bruikbare velden altijd
-    al op de eerste paar pagina's staan."""
+    al op de eerste paar pagina's staan.
+
+    Geeft pdfplumber onleesbare tekst terug (foutieve tekenmapping in het
+    PDF-font, zie _tekst_is_onleesbaar), dan wordt automatisch teruggevallen
+    op OCR."""
     tekst = ""
     try:
         with pdfplumber.open(str(pdf_pad)) as pdf:
@@ -250,6 +303,13 @@ def _pdf_tekst(pdf_pad: str | Path, max_paginas: int | None = None) -> str:
                 tekst += (page.extract_text() or "") + "\n"
     except Exception as e:
         tekst = f"[PDF LEESFOUT: {e}]"
+
+    if _tekst_is_onleesbaar(tekst):
+        log.info(f"PDF-tekst onleesbaar (foutieve tekenmapping), OCR-terugval voor {pdf_pad}")
+        ocr_tekst = _ocr_pdf_tekst(pdf_pad, max_paginas=max_paginas)
+        if ocr_tekst.strip():
+            tekst = ocr_tekst
+
     return tekst
 
 
@@ -289,7 +349,7 @@ def _classificeer_type_verzoek(*teksten: str) -> str:
 
 def _detecteer_formaat(tekst: str) -> str:
     """Detecteer het PDF-formaat op basis van sleutelwoorden."""
-    if "Werkorder #" in tekst and "Detail Servicerapport" in tekst:
+    if "Werkorder #" in tekst and "Servicerapport" in tekst:
         return "vantive"
     if "Serial-No.:" in tekst and ("Nipro" in tekst or "DSURDIAL" in tekst or "QMS ID" in tekst):
         return "nipro"
@@ -323,12 +383,14 @@ def _extraheer_vantive(tekst: str, _pdf_pad: str | Path = "") -> dict:
     uren_arbeid = ""
 
     # Serienummer
-    m = re.search(r"Serienummer\s*:\s*([A-Z0-9]+)", tekst)
+    # ":?" i.p.v. ":" — bij een OCR-terugval (zie _ocr_pdf_tekst) valt de
+    # dubbele punt op kolomgrenzen er soms uit.
+    m = re.search(r"Serienummer[\s:>_-]{0,8}([A-Z0-9]{4,})", tekst)
     if m:
         sn = m.group(1).strip()
 
     # Product omschrijving
-    m = re.search(r"Product Omschrijving\s*:\s*(.+?)(?:\n|Software)", tekst)
+    m = re.search(r"Product Omschrijving\s*:?\s*(.+?)(?:\n|Software)", tekst)
     if m:
         product = m.group(1).strip()
 
@@ -337,13 +399,14 @@ def _extraheer_vantive(tekst: str, _pdf_pad: str | Path = "") -> dict:
     if m:
         werkorder_nr = m.group(1).strip()
 
-    # Datum
-    m = re.search(r"(?:START ACTIVITEIT|Afsluitdatum)\s*:\s*(\d{2}/\w+/\d{4})", tekst)
+    # Datum — scheidingsteken flexibel (":" normaal, bij OCR soms "—:" of
+    # enkel een spatie)
+    m = re.search(r"(?:START ACTIVITEIT|Afsluitdatum)[^\d\n]{0,4}(\d{2}/\w+/\d{4})", tekst)
     if m:
         datum = m.group(1).strip()
 
     # Type verzoek
-    m = re.search(r"Type Verzoek\s*:\s*(.+?)(?:\n|aangemaakt)", tekst)
+    m = re.search(r"Type Verzoek\s*:?\s*(.+?)(?:\n|aangemaakt)", tekst)
     if m:
         type_verzoek = m.group(1).strip()
 
@@ -356,16 +419,26 @@ def _extraheer_vantive(tekst: str, _pdf_pad: str | Path = "") -> dict:
     # pdfplumber rendert kolommen naast elkaar: "Probleemomschrijving :\nklant Error 24\n"
     # Bij een meerregelige omschrijving lekken rechterkolom-velden (Garantie, Te factureren, ...)
     # mee tussen de regels van de linkerkolom, en de tekst loopt door tot ORDERNUMMER/START ACTIVITEIT.
+    # "klant" wordt hier niet meer als verplicht vast voorvoegsel gematcht:
+    # bij een OCR-terugval kan de volgorde "klant" / eigenlijke tekst wisselen
+    # (bv. "B1593\nklant Te factureren : ON" i.p.v. "klant B1593 ..."), dus
+    # het hele blok tot de volgende bekende veldnaam wordt gepakt en "klant"
+    # erna als losstaand kolom-sublabel weggeknipt.
     omschrijving_kort = ""
     m = re.search(
-        r"Probleemomschrijving\s*:?\s*\nklant\s+(.+?)(?:\nORDERNUMMER|\nSTART ACTIVITEIT|\Z)",
+        r"Probleemomschrijving\s*:?\s*\n(.+?)(?:\nORDERNUMMER|\nSTART ACTIVITEIT|\Z)",
         tekst, re.DOTALL
     )
     if m:
         ruwe_tekst = m.group(1)
-        # Rechterkolom-velden die tussen de regels geplakt zijn eruit knippen
+        # "klant" is enkel een kolom-sublabel zonder eigen waarde (de
+        # eigenlijke tekst volgt/voorafgaat los), dus enkel het woord zelf
+        # weghalen — niet het eerstvolgende woord mee opeten.
+        ruwe_tekst = re.sub(r"\bklant\b\s*:?\s*", "", ruwe_tekst)
+        # Rechterkolom-velden (mét waarde) die tussen de regels geplakt zijn
+        # eruit knippen
         ruwe_tekst = re.sub(
-            r"\b(?:Garantie|Te\s+factureren|Contractnummer|aangemaakt|ORDERNUMMER|Type\s+Werkorder|Type\s+Verzoek)\s*:\s*\S*",
+            r"\b(?:Garantie|Te\s+factureren|Contractnummer|aangemaakt|ORDERNUMMER|Type\s+Werkorder|Type\s+Verzoek)\s*:?\s*\S*",
             "", ruwe_tekst
         )
         omschrijving_kort = " ".join(ruwe_tekst.split())
@@ -373,12 +446,11 @@ def _extraheer_vantive(tekst: str, _pdf_pad: str | Path = "") -> dict:
     # Opmerkingen uit interventietabel -> WO commentaarveld
     # Pagina 1 apart lezen zodat pagina 2 niet mee lekt.
     activiteit_tekst = ""
-    try:
-        import pdfplumber as _plb
-        with _plb.open(str(_pdf_pad)) as _pdf:
-            tekst_p1 = _pdf.pages[0].extract_text() or "" if _pdf.pages else tekst
-    except Exception:
-        tekst_p1 = tekst
+    tekst_p1 = tekst
+    if _pdf_pad:
+        p1 = _pdf_tekst(_pdf_pad, max_paginas=1)
+        if p1 and not p1.startswith("[PDF LEESFOUT"):
+            tekst_p1 = p1
     
     # Probeer eerst het oude format: "Opmerkingen Eigendom" headers
     m = re.search(
@@ -392,10 +464,19 @@ def _extraheer_vantive(tekst: str, _pdf_pad: str | Path = "") -> dict:
         activiteit_tekst = " ".join(("\n".join([eerste] + rest)).split())
     
     # Fallback: nieuw format met tabel (Device Evaluation / Repair / enz)
+    # "^" (met MULTILINE) i.p.v. een losse "Repair" overal in de tekst:
+    # "Repair" komt ook voor als waarde bij "Type Verzoek : Repair" hogerop
+    # in het rapport, en zonder regelanker matcht re.search daar al op
+    # i.p.v. op de echte interventietabel verderop.
     if not activiteit_tekst:
+        # ".*\n" i.p.v. een strikt lege regel na het sleutelwoord: bij een
+        # OCR-terugval staat de Eigendom-naam (bv. "Patrick Rowies") soms
+        # direct achter "Repair"/"Device Evaluation" op diezelfde regel
+        # i.p.v. achteraan de eerste inhoudsregel — in beide gevallen wordt
+        # die naam zo buiten het gevangen blok gehouden.
         m = re.search(
-            r"(?:Device Evaluation|Repair)\s*\n(.+?)(?:\nTest Aparatuur|\nWERKTIJD EN REISTIJD|\nHandtekening|\Z)",
-            tekst_p1, re.DOTALL
+            r"^(?:Device Evaluation|Repair)\b[^\n]*\n(.+?)(?:\nTest Aparatuur|\nWERKTIJD EN REISTIJD|\nHandtekening|\Z)",
+            tekst_p1, re.DOTALL | re.MULTILINE
         )
         if m:
             blok = m.group(1).strip()
@@ -868,14 +949,9 @@ def _extraheer_stryker(pdf_pad: str | Path) -> dict:
     functie leest daarom bewust slechts de eerste 3 pagina's, in
     tegenstelling tot de andere extractors die de al ingelezen volledige
     tekst als parameter krijgen."""
-    tekst = ""
-    try:
-        import pdfplumber as _plb
-        with _plb.open(str(pdf_pad)) as _pdf:
-            for _pagina in _pdf.pages[:3]:
-                tekst += (_pagina.extract_text() or "") + "\n"
-    except Exception:
-        pass
+    tekst = _pdf_tekst(pdf_pad, max_paginas=3)
+    if tekst.startswith("[PDF LEESFOUT"):
+        tekst = ""
 
     sn = ""
     product = ""
