@@ -51,6 +51,11 @@ _ensure_packages()
 # (pip) geinstalleerd worden, maar wel automatisch via winget - zodat
 # collega's hier zelf niets voor hoeven te doen of uit te leggen krijgen.
 import shutil
+# winget zet Tesseract niet op PATH. Eerst de standaard installatiemap proberen,
+# zodat winget niet bij elke start opnieuw draait.
+_tess_standaard = r"C:\Program Files\Tesseract-OCR"
+if not shutil.which("tesseract") and os.path.exists(os.path.join(_tess_standaard, "tesseract.exe")):
+    os.environ["Path"] = os.environ.get("Path", "") + ";" + _tess_standaard
 if not shutil.which("tesseract"):
     print("Tesseract OCR niet gevonden - wordt automatisch geinstalleerd via winget...")
     try:
@@ -77,19 +82,32 @@ if not shutil.which("tesseract"):
 # taalpakket. Nederlands wordt hier los bijgehaald (officiele tessdata_fast
 # repo) zodat de OCR-terugval ook Nederlandse tekst goed leest i.p.v. enkel
 # de Engelse fallback te gebruiken (zie wo_service_rapport.py).
+# C:\Program Files is zonder adminrechten niet beschrijfbaar, daarom komt er een
+# eigen map 'tessdata' naast de app (eng + nld) en wijst TESSDATA_PREFIX daarheen.
 _tess_pad = shutil.which("tesseract")
 if _tess_pad:
-    _tessdata_map = os.path.join(os.path.dirname(_tess_pad), "tessdata")
-    _nld_bestand = os.path.join(_tessdata_map, "nld.traineddata")
-    if os.path.isdir(_tessdata_map) and not os.path.exists(_nld_bestand):
-        print("Nederlands taalpakket voor Tesseract OCR niet gevonden - wordt gedownload...")
+    _tessdata_prog = os.path.join(os.path.dirname(_tess_pad), "tessdata")
+    _tessdata_lokaal = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tessdata")
+    if os.path.isdir(_tessdata_prog) and not os.path.exists(os.path.join(_tessdata_prog, "nld.traineddata")):
         try:
-            import urllib.request
-            urllib.request.urlretrieve(
-                "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/nld.traineddata",
-                _nld_bestand,
-            )
-            print("Nederlands taalpakket voor Tesseract OCR geinstalleerd")
+            os.makedirs(_tessdata_lokaal, exist_ok=True)
+            _eng_lokaal = os.path.join(_tessdata_lokaal, "eng.traineddata")
+            _eng_prog = os.path.join(_tessdata_prog, "eng.traineddata")
+            if not os.path.exists(_eng_lokaal) and os.path.exists(_eng_prog):
+                shutil.copyfile(_eng_prog, _eng_lokaal)
+            _nld_lokaal = os.path.join(_tessdata_lokaal, "nld.traineddata")
+            if not os.path.exists(_nld_lokaal):
+                print("Nederlands taalpakket voor Tesseract OCR niet gevonden - wordt gedownload...")
+                import urllib.request
+                _tmp = _nld_lokaal + ".tmp"
+                urllib.request.urlretrieve(
+                    "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/nld.traineddata",
+                    _tmp,
+                )
+                os.replace(_tmp, _nld_lokaal)
+                print("Nederlands taalpakket voor Tesseract OCR geinstalleerd")
+            if os.path.exists(_eng_lokaal) and os.path.exists(_nld_lokaal):
+                os.environ["TESSDATA_PREFIX"] = _tessdata_lokaal
         except Exception as e:
             print(f"WAARSCHUWING: download Nederlands taalpakket mislukt ({e}) - "
                   "OCR-terugval gebruikt dan enkel Engels")

@@ -10,6 +10,7 @@ __pycache__/
 # Runtime data, logs, gegenereerde output (blijft lokaal per machine)
 logs/
 uploads/
+tessdata/
 *.log
 *.lock
 data.json
