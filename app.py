@@ -2506,6 +2506,107 @@ class LogBestandWatcher(FileSystemEventHandler):
                 log.error(f"Fout bij lezen logbestand {self.naam}: {e}")
 
 
+import re
+from datetime import timedelta as _timedelta
+
+
+class CcsLogWatcher(LogBestandWatcher):
+    """Watcher voor CCS_error.txt die regels verwerkt op basis van hun
+    TIJDSTEMPEL i.p.v. een bytepositie.
+
+    De bytepositie-aanpak van LogBestandWatcher negeert alles zolang het
+    bestand niet groter is dan de laatst onthouden positie: wordt het bestand
+    door de CCS-software ingekort/herschreven, of valt watchdog op de
+    netwerkshare stil, dan worden 'enabled'-regels (= vat vervangen ->
+    ESS-bestelling + WO) stilletjes gemist. Hier wordt daarom bij elke
+    wijziging EN elke 30 s (polling, zie start_ro_log_watchers) het bestand
+    opnieuw doorlopen en enkel verwerkt wat nieuwer is dan de laatst
+    verwerkte regel (bewaard in ccs_watch_staat.json, dus ook na herstart).
+    Onvolledig geschreven regels matchen de regex niet en worden pas
+    verwerkt zodra ze volledig zijn.
+    """
+    _REGEL = re.compile(
+        r"^(\d{2}\.\d{2}\.\d{4})\s+(\d{2}:\d{2}:\d{2})\t(container \d\.\d)\t(enabled|disabled)\s*$",
+        re.IGNORECASE,
+    )
+    STAAT_PAD    = Path(__file__).parent / "ccs_watch_staat.json"
+    # Gemiste regels (bv. na een herstart) worden nog ingehaald tot deze leeftijd;
+    # oudere worden enkel gelogd (WARNING) — om late/dubbele bestellingen te vermijden.
+    CATCHUP_UREN = 24
+
+    def __init__(self, naam: str, pad: Path):
+        super().__init__(naam, pad)
+        self._laatste = self._laad_laatste()
+        if self._laatste is None:
+            # Eerste keer: geen historiek opnieuw afspelen, vanaf nu verder.
+            tijden = [ts for ts, _ in self._lees_regels()]
+            self._laatste = max(tijden) if tijden else datetime.now()
+            self._bewaar()
+        else:
+            self.verwerk_nieuwe()   # inhalen wat gemist werd tijdens stilstand
+
+    def _laad_laatste(self):
+        try:
+            data = _lees_json_veilig(self.STAAT_PAD, {})
+            return datetime.fromisoformat(data[self.naam])
+        except Exception:
+            return None
+
+    def _bewaar(self):
+        try:
+            data = _lees_json_veilig(self.STAAT_PAD, {})
+            data[self.naam] = self._laatste.isoformat()
+            _schrijf_json_atomisch(self.STAAT_PAD, data)
+        except Exception as e:
+            log.error(f"CCS watcher staat bewaren mislukt: {e}")
+
+    def _lees_regels(self) -> list:
+        """Geeft [(tijdstempel, regel)] voor alle geldige regels in het bestand."""
+        if not self.pad.exists():
+            return []
+        with open(self.pad, "rb") as f:
+            f.seek(0, 2)
+            f.seek(max(0, f.tell() - 2_000_000))
+            tekst = f.read().decode("utf-8", errors="replace")
+        resultaat = []
+        for regel in tekst.splitlines():
+            regel = regel.strip()
+            m = self._REGEL.match(regel)
+            if not m:
+                continue
+            try:
+                ts = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%d.%m.%Y %H:%M:%S")
+            except ValueError:
+                continue
+            resultaat.append((ts, regel))
+        return resultaat
+
+    def verwerk_nieuwe(self):
+        with self._lock:
+            try:
+                nieuw = sorted(r for r in self._lees_regels() if r[0] > self._laatste)
+            except Exception as e:
+                log.error(f"Fout bij lezen logbestand {self.naam}: {e}")
+                return
+            for ts, regel in nieuw:
+                # Eerst bewaren: een regel mag nooit twee keer verwerkt worden.
+                self._laatste = ts
+                self._bewaar()
+                if datetime.now() - ts > _timedelta(hours=self.CATCHUP_UREN):
+                    log.warning(f"CCS-regel te oud om in te halen, overgeslagen: [{self.naam}] {regel}")
+                    continue
+                log.info(f"Nieuwe logregel [{self.naam}]: {regel}")
+                try:
+                    sla_alert_op(self.naam, regel)
+                except Exception as e:
+                    log.error(f"Fout bij verwerken CCS-regel '{regel}': {e}")
+
+    def on_modified(self, event):
+        if Path(event.src_path).resolve() != self.pad.resolve():
+            return
+        self.verwerk_nieuwe()
+
+
 def start_ro_log_watchers():
     if not WATCHDOG_OK:
         log.warning("watchdog niet geinstalleerd — gebruik polling als fallback")
@@ -2513,16 +2614,34 @@ def start_ro_log_watchers():
     cfg        = load_config()
     log_config = cfg.get("error_logs", DEFAULT_ERROR_LOGS)
     observer   = Observer()
+    ccs_handlers = []
     for naam, pad_str in log_config.items():
         pad = Path(pad_str)
         if not pad.parent.exists():
             log.warning(f"Log map niet gevonden, watcher overgeslagen: {pad.parent}")
             continue
-        handler = LogBestandWatcher(naam, pad)
+        if naam in CCS_INSTALLATIES:
+            handler = CcsLogWatcher(naam, pad)
+            ccs_handlers.append(handler)
+        else:
+            handler = LogBestandWatcher(naam, pad)
         observer.schedule(handler, str(pad.parent), recursive=False)
         log.info(f"Log watcher actief: [{naam}] {pad}")
     observer.start()
     log.info("RO/HR/CCS log watchers gestart")
+
+    # Polling-vangnet voor CCS: watchdog op een netwerkshare kan stilvallen.
+    if ccs_handlers:
+        def _ccs_poll():
+            while True:
+                _time.sleep(30)
+                for h in ccs_handlers:
+                    try:
+                        h.verwerk_nieuwe()
+                    except Exception as e:
+                        log.error(f"CCS polling fout [{h.naam}]: {e}")
+        threading.Thread(target=_ccs_poll, daemon=True, name="ccs-poll").start()
+        log.info("CCS polling-vangnet gestart (elke 30s)")
 
 
 def schrijf_error_logs_json():
