@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -62,6 +63,24 @@ def _lees_werkuren_users() -> list[dict]:
     return users
 
 PS_USERS = _lees_werkuren_users()
+
+
+def _naam_norm(tekst: str) -> str:
+    """Normaliseert een naam voor vergelijking: herstelt (dubbel) verkeerd
+    gecodeerde tekst uit config.json (bv. 'JOSÃƒâ€° RYDANT' -> 'JOSÉ RYDANT'),
+    negeert accenten en hoofdletters."""
+    tekst = tekst or ""
+    for _ in range(3):
+        try:
+            nieuw = tekst.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if nieuw == tekst:
+            break
+        tekst = nieuw
+    tekst = unicodedata.normalize("NFKD", tekst)
+    return "".join(c for c in tekst if not unicodedata.combining(c)).casefold().strip()
+
 
 from uitvoerder_utils import bepaal_uitvoerder
 UITVOERDER = bepaal_uitvoerder(_cfg, PS_USER)
@@ -259,7 +278,7 @@ async def vul_werkuren_lijn(frame, idx: int, user: dict, log, uren: str = "0.5")
             try:
                 naam_tekst = await frame.locator(naam_field).inner_text(timeout=5_000)
                 log(f"  WERKUREN lijn {lijn_nr}: Naam-veld gelezen = '{naam_tekst.strip()}'")
-                if user["naam"] and user["naam"].lower() in naam_tekst.lower():
+                if user["naam"] and _naam_norm(user["naam"]) in _naam_norm(naam_tekst):
                     log(f"  WERKUREN lijn {lijn_nr}: ✓ Naam geverifieerd ('{user['naam']}' gevonden)")
                     break
                 elif not user["naam"]:
