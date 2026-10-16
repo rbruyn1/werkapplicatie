@@ -19,6 +19,8 @@ historiek).
 - Na het opslaan (UITGEV) worden de taak-ID's teruggelezen en vergeleken; bij een
   afwijking volgt dezelfde alert als bij een andere fout.
 - `ro_sheets.taken_toevoegen: false` schakelt dit uit. Dry-run logt de taken.
+- Kolommen worden spatie-ongevoelig gezocht ("Controle SoftControl" wordt gevonden). Regeleinden in
+  opmerkingen worden vervangen door een spatie en tekst wordt begrensd op 250 tekens.
 - Nieuwe gedeelde helpers in `wo_aanmaken.py`: `vul_taaklijnen_tekst`, `lees_taak_ids`.
 
 ### RO-formulieren → automatisch werkorder (eerste versie)

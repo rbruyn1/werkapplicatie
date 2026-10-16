@@ -1012,6 +1012,14 @@ async def vul_taaklijnen_tekst(frame, taken: list[dict], log) -> dict:
 
             await frame.type(_id("UZFM_WO_WRK_UZ_WAARDE_TEKST", lijn_nr), t["waarde"], delay=80)
             await asyncio.sleep(0.5)
+            try:   # controle: staat er wat we getypt hebben? (veld kan inkorten) — enkel waarschuwen
+                gelezen = (await frame.locator(_id("UZFM_WO_WRK_UZ_WAARDE_TEKST", lijn_nr))
+                           .input_value(timeout=2_000)).strip()
+                if gelezen != t["waarde"]:
+                    log(f"  TAKEN: ⚠ lijn {lijn_nr}: veld bevat '{gelezen}' i.p.v. '{t['waarde']}' "
+                        f"(ingekort door PeopleSoft?)")
+            except Exception:
+                pass
             ingevuld.append(t["id"])
         except Exception as e:
             log(f"  TAKEN: ❌ lijn {lijn_nr} (taak {t['id']}): {e}")

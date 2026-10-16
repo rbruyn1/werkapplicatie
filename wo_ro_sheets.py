@@ -64,13 +64,15 @@ RO_DATA    = BASIS / "ro_staalname.json"
 
 OMSCHRIJVING = "Aanvullen zout + algemene controle"
 
+TAAK_TEKST_MAX = 250   # veiligheidsgrens voor het tekstveld in PeopleSoft (werkelijke limiet onbekend)
+
 # TaakID's (PeopleSoft) ↔ kolom in het formulier. Volgorde = volgorde van de taaklijnen.
 # 'kolom' = zoekwoord in de header van de sheet (overschrijfbaar via config 'taak_kolommen').
 TAKEN = [
     {"id": "0000001962", "label": "Aantal zakken zout",        "kolom": "zakken zout"},
     {"id": "0000001963", "label": "Ingangsdruk",               "kolom": "ingangsdruk"},
     {"id": "0000001964", "label": "Stand waterteller",         "kolom": "waterteller"},
-    {"id": "0000001965", "label": "Soft Control",              "kolom": "soft control"},
+    {"id": "0000001965", "label": "Soft Control",              "kolom": "softcontrol"},
     {"id": "0000001966", "label": "Geleidbaarheid",            "kolom": "geleidbaarheid"},
     {"id": "0000001967", "label": "Controle hittedesinfectie", "kolom": "hittedesinfectie"},
     {"id": "0000001968", "label": "Opmerkingen",               "kolom": "opmerking"},
@@ -148,9 +150,15 @@ def _haal_rijen(csv_url: str) -> list[dict]:
         return []
     kop = [k.strip() for k in kop]
 
+    def _compact(t: str) -> str:
+        return re.sub(r"\s+", "", t.lower())
+
     def kol(naam_deel: str):
+        """Eerste kolom waarvan de header het zoekwoord bevat (hoofdletter- en spatie-ongevoelig,
+        dus 'soft control' vindt ook 'Controle SoftControl')."""
+        doel = _compact(naam_deel)
         for i, k in enumerate(kop):
-            if naam_deel in k.lower():
+            if doel in _compact(k):
                 return i
         return None
 
@@ -233,8 +241,19 @@ def markeer(naam: str, tijdstempel: str, resultaat: dict) -> None:
 def bouw_taaklijst(rij: dict) -> list[dict]:
     """Taken met een ingevulde waarde, in TAKEN-volgorde. Lege velden worden overgeslagen."""
     waarden = rij.get("taken", {}) or {}
-    return [{"id": t["id"], "label": t["label"], "waarde": waarden[t["id"]]}
-            for t in TAKEN if waarden.get(t["id"], "").strip()]
+    lijst = []
+    for t in TAKEN:
+        # Alle witruimte (ook regeleinden uit meerregelige opmerkingen) → één spatie:
+        # een Enter in het enkelregelige PeopleSoft-veld zou ongewenste acties kunnen starten.
+        waarde = " ".join(str(waarden.get(t["id"], "")).split())
+        if not waarde:
+            continue
+        if len(waarde) > TAAK_TEKST_MAX:
+            _schrijf_log(f"⚠ Taak {t['id']} ({t['label']}): tekst van {len(waarde)} tekens ingekort "
+                         f"tot {TAAK_TEKST_MAX}")
+            waarde = waarde[:TAAK_TEKST_MAX - 1].rstrip() + "…"
+        lijst.append({"id": t["id"], "label": t["label"], "waarde": waarde})
+    return lijst
 
 
 # ── PeopleSoft: WO aanmaken ──────────────────────────────────────────────────
