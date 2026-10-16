@@ -743,6 +743,38 @@ def start_background_scraper():
         log.error(f"Fout bij initieel schrijven hr_log_data.json: {e}")
     start_hr_log_loop(interval)
     start_ccs_log_loop(interval)
+    start_ro_sheets_loop(stop_event)
+
+
+def _ro_sheets_alert(naam: str, rij: dict, fout: str):
+    """Popup-alert wanneer het automatisch aanmaken van een RO-werkorder mislukt."""
+    try:
+        alerts = lees_alerts()
+        alerts.append({
+            "id":            int(datetime.now().timestamp() * 1000),
+            "naam":          "RO WERKORDER",
+            "regel":         f"⚠ Automatische WO mislukt voor {naam} (ingave {rij.get('tijdstempel')}) "
+                             f"— manueel aanmaken! ({fout or 'onbekende fout'})",
+            "tijdstip":      datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "persistent":    False,
+            "ccs_container": None,
+            "herstel":       False,
+            "bevestigd":     False,
+        })
+        _schrijf_json_atomisch(ALERTS_PATH, alerts)
+        log.warning(f"RO-sheets WO mislukt voor {naam} {rij.get('tijdstempel')}: {fout}")
+    except Exception as e:
+        log.error(f"RO-sheets alert kon niet geschreven worden: {e}")
+
+
+def start_ro_sheets_loop(stop_event):
+    """Pollt de RO-formulier-sheets en maakt WO's aan. Enkel op de scraper-master
+    (die roept deze functie aan) en enkel als ro_sheets.enabled in config.json staat."""
+    try:
+        from wo_ro_sheets import start_loop
+        start_loop(stop_event, on_fout=_ro_sheets_alert)
+    except Exception as e:
+        log.error(f"RO-sheets loop kon niet gestart worden: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -3353,6 +3385,17 @@ def _log_bestanden() -> list[dict]:
         {"id": "ccs_wo",           "naam": "CCS Werkorders",      "pad": basis / "logs" / "ccs_wo.log"},
         {"id": "ess_bestelling",   "naam": "ESS Bestellingen",    "pad": basis / "logs" / "ess_bestelling.log"},
     ]
+    # Enkel zichtbaar voor rbruyn1 (= gebruiker van deze PC, zie uitvoerder_utils;
+    # op de master-pc onder sa_water wordt dat ook rbruyn1). Voor iedereen anders
+    # ontbreekt het in de lijst én geeft het lees-endpoint een 404.
+    try:
+        from uitvoerder_utils import bepaal_uitvoerder
+        cfg = load_config()
+        if bepaal_uitvoerder(cfg, cfg.get("username", "")) == "rbruyn1":
+            bestanden.append({"id": "ro_sheets_wo", "naam": "RO Formulier-WO's",
+                              "pad": basis / "logs" / "ro_sheets_wo.log"})
+    except Exception as e:
+        log.warning(f"Kon gebruiker voor logzichtbaarheid niet bepalen: {e}")
     return bestanden
 
 

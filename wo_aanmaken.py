@@ -320,10 +320,14 @@ async def vul_werkuren_lijn(frame, idx: int, user: dict, log, uren: str = "0.5")
     # ── Verificatie ─────────────────────────────────────────────────────────
     try:
         waarde = await frame.locator(uren_field).input_value(timeout=3_000)
-        if waarde == "0.5" or waarde == ".5" or "0.5" in waarde:
+        try:
+            klopt = abs(float(waarde.replace(",", ".")) - float(uren)) < 1e-9
+        except ValueError:
+            klopt = False
+        if klopt:
             log(f"  WERKUREN lijn {lijn_nr}: ✓ Urenveld bevestigd = '{waarde}'")
         else:
-            log(f"  WERKUREN lijn {lijn_nr}: ⚠ Urenveld onverwachte waarde = '{waarde}' (verwacht 0.5)")
+            log(f"  WERKUREN lijn {lijn_nr}: ⚠ Urenveld onverwachte waarde = '{waarde}' (verwacht {uren})")
     except Exception as e:
         log(f"  WERKUREN lijn {lijn_nr}: Urenveld verificatie mislukt: {e}")
 

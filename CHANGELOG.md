@@ -5,6 +5,25 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-10-16
+
+### RO-formulieren → automatisch werkorder (eerste versie)
+- Nieuwe module `wo_ro_sheets.py`: pollt elke 5 minuten de Google Sheets achter
+  de RO-formulieren (RO1 465, RO2 465, RO 304) en maakt voor elke nieuwe ingave
+  een WO "Aanvullen zout + algemene controle" aan met 1 werkuur voor `rbruyn1`
+  (status UITGEV, zelfde aanpak als de CCS-container-WO).
+- Draait enkel op de scraper-master, in een eigen achtergrondthread.
+- Eerste keer = baseline: bestaande rijen worden niet verwerkt. Elke rij wordt
+  maar één keer verwerkt (`ro_sheets_staat.json`). Bij een fout geen blinde
+  herpoging, wel een popup-alert om manueel aan te maken.
+- Staat standaard UIT en in `dry_run`: zet in `config.json` onder `ro_sheets`
+  `enabled: true`, vul de T-nummers in en zet pas daarna `dry_run` op `false`.
+  Zie `config.example.json`. Log: `logs/ro_sheets_wo.log`. Dat log is in de
+  Logs-pagina enkel zichtbaar als de PC-gebruiker `rbruyn1` is (ook `sa_water`
+  op de master-pc); voor anderen ontbreekt het in de lijst en geeft het 404.
+- `vul_werkuren_lijn` controleert het urenveld nu tegen de meegegeven uren i.p.v.
+  hard tegen 0.5.
+
 ## 2026-10-14
 
 ### Service rapporten — OCR-terugval (Tesseract) opstarten

@@ -30,6 +30,30 @@
     "VOORBEELD HR": "Z:\\pad\\naar\\HR_data.txt"
   },
   "ccs_log": "Z:\\pad\\naar\\CCS_data.txt",
+  "ro_sheets": {
+    "enabled": false,
+    "dry_run": true,
+    "interval_seconden": 300,
+    "uitvoerder_oprid": "rbruyn1",
+    "uren": "1",
+    "installaties": [
+      {
+        "naam": "RO1 465",
+        "maximo": "VUL_T-NUMMER_IN",
+        "csv_url": "https://docs.google.com/spreadsheets/d/0Auq0_f_SpI55dG1sejc1ZjVSZGlZVnFGYm44RkdVVWc/export?format=csv&gid=1"
+      },
+      {
+        "naam": "RO2 465",
+        "maximo": "VUL_T-NUMMER_IN",
+        "csv_url": "https://docs.google.com/spreadsheets/d/0Auq0_f_SpI55dHFsaDlkLWZzT3Y0SXlKSmJla1ZXUVE/export?format=csv&gid=1"
+      },
+      {
+        "naam": "RO 304",
+        "maximo": "VUL_T-NUMMER_IN",
+        "csv_url": "https://docs.google.com/spreadsheets/d/1HXuW8mKUXEd6FGfMAL3F6TGMbFbexhhkMFOy9h10R8o/export?format=csv"
+      }
+    ]
+  },
   "ccs_vaten": {
     "container 1.1": {
       "type": "VOORBEELD",
