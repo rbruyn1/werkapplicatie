@@ -423,6 +423,11 @@ def poll_en_verwerk(on_fout=None) -> dict:
             samenvatting["nieuw"] += 1
             _schrijf_log(f"{naam}: nieuwe ingave {rij['tijdstempel']} "
                          f"(zout={rij['zakken_zout'] or '?'}, door={rij['registratie_door'] or '?'})")
+            if not maximo and dry_run:
+                # Niet markeren: zodra het T-nummer bekend is, wordt de ingave alsnog verwerkt.
+                _schrijf_log(f"{naam}: ⚠ geen T-nummer (maximo) in config.json of ro_staalname.json "
+                             f"— ingave blijft open staan")
+                continue
             if not maximo:
                 res = {"ok": False, "fout": f"Geen T-nummer (maximo) voor '{naam}' in config.json of ro_staalname.json"}
                 markeer(naam, rij["tijdstempel"], res)
