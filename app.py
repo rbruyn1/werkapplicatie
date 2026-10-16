@@ -1170,30 +1170,37 @@ def _comserver_bestand_pad(cfg: dict, naam: str) -> Path:
     return Path(naam)
 
 
-def _comserver_leeftijd_min(cfg: dict, cs: dict):
+def _comserver_leeftijd_min(cfg: dict, cs: dict, met_naam: bool = False):
     """Minuten sinds de laatste wijziging van het OUDSTE bestand van deze
     Com-Server: één poort die stilvalt volstaat om te resetten (ook als de
     andere poorten nog data leveren). None als er geen (leesbaar) bestand is
-    of niets ingesteld."""
+    of niets ingesteld. Met met_naam=True: (minuten, naam van dat bestand)."""
     leeftijden = []
     for naam in cs.get("bestanden") or []:
         try:
-            leeftijden.append((_time.time() - _comserver_bestand_pad(cfg, naam).stat().st_mtime) / 60)
+            leeftijden.append(((_time.time() - _comserver_bestand_pad(cfg, naam).stat().st_mtime) / 60, naam))
         except OSError:
             continue
-    return max(leeftijden) if leeftijden else None
+    if not leeftijden:
+        return None
+    oudste = max(leeftijden)
+    return oudste if met_naam else oudste[0]
 
 
-def _comserver_reset_uitvoeren(cs: dict) -> dict:
-    from comserver import reset_comserver
+def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig") -> dict:
+    from comserver import reset_comserver, schrijf_log
     hostname = socket.gethostname()
+    naam = cs.get("naam", cs["ip"])
     if hostname.upper() != COMSERVER_RESET_PC:
         fout = f"Com-Server reset geweigerd: alleen pc '{COMSERVER_RESET_PC}' mag dit (deze pc: '{hostname}')"
         log.warning(fout)
+        schrijf_log(f"{cs['ip']}: {fout}")
         return {"ok": False, "fout": fout, "log": [], "pc": hostname}
+    schrijf_log(f"{cs['ip']}: '{naam}' — {bron}e reset gestart (pc {hostname})")
     res = reset_comserver(cs["ip"], wachtwoord=cs.get("wachtwoord", ""))
+    schrijf_log(f"{cs['ip']}: resultaat: " + ("OK" if res["ok"] else f"MISLUKT — {res['fout']}"))
     (log.warning if res["ok"] else log.error)(
-        f"Com-Server '{cs.get('naam', cs['ip'])}' ({cs['ip']}) reset: "
+        f"Com-Server '{naam}' ({cs['ip']}) reset: "
         f"{'OK' if res['ok'] else res['fout']}")
     res["pc"] = hostname
     return res
@@ -1221,7 +1228,7 @@ def api_comserver_reset():
     cs = next((c for c in _comservers() if c["ip"] == ip), None)
     if not cs:
         return jsonify({"ok": False, "fout": f"Onbekende Com-Server '{ip}'"}), 400
-    res = _comserver_reset_uitvoeren(cs)
+    res = _comserver_reset_uitvoeren(cs, "handmatig")
     res["naam"] = cs.get("naam", ip)
     return jsonify(res), (200 if res["ok"] else 500)
 
@@ -1233,9 +1240,10 @@ def _comserver_controle_ronde(staat: dict):
         if not cs.get("bestanden"):
             continue                      # automatisch resetten is opt-in
         naam, ip = cs.get("naam", cs["ip"]), cs["ip"]
-        leeftijd = _comserver_leeftijd_min(cfg, cs)
-        if leeftijd is None:
+        oudste = _comserver_leeftijd_min(cfg, cs, met_naam=True)
+        if oudste is None:
             continue                      # share/bestanden niet bereikbaar: niets doen
+        leeftijd, oudste_naam = oudste
         st = staat.setdefault(ip, {"resets": [], "gemeld": False})
         if leeftijd <= float(cs.get("stale_minuten", 15)):
             st["gemeld"] = False          # data loopt weer: nieuwe episode mogelijk
@@ -1247,11 +1255,18 @@ def _comserver_controle_ronde(staat: dict):
         if len(st["resets"]) >= COMSERVER_MAX_PER_DAG:
             if not st["gemeld"]:
                 st["gemeld"] = True
+                from comserver import schrijf_log
+                schrijf_log(f"{ip}: '{naam}' — '{oudste_naam}' al {leeftijd:.0f} min niet bijgewerkt; "
+                            f"maximum van {COMSERVER_MAX_PER_DAG} automatische resets per 24u bereikt — manueel nakijken")
                 stuur_matrix_bericht(f"\u26a0\ufe0f {naam} ({ip}): data nog steeds niet bijgewerkt "
                                      f"({leeftijd:.0f} min) na {COMSERVER_MAX_PER_DAG} automatische resets — manueel nakijken.")
             continue
         st["resets"].append(nu)           # eerst registreren: nooit lussen
-        res = _comserver_reset_uitvoeren(cs)
+        from comserver import schrijf_log
+        schrijf_log(f"{ip}: '{naam}' — '{oudste_naam}' {leeftijd:.0f} min niet bijgewerkt "
+                    f"(drempel {float(cs.get('stale_minuten', 15)):.0f} min) -> automatische reset "
+                    f"({len(st['resets'])}/{COMSERVER_MAX_PER_DAG} vandaag)")
+        res = _comserver_reset_uitvoeren(cs, "automatisch")
         stuur_matrix_bericht(
             f"\U0001f501 {naam} ({ip}): data {leeftijd:.0f} min niet bijgewerkt -> automatische reset "
             + ("uitgevoerd." if res["ok"] else f"MISLUKT: {res['fout']}"))
@@ -3540,9 +3555,13 @@ def _log_bestanden() -> list[dict]:
     try:
         from uitvoerder_utils import bepaal_uitvoerder
         cfg = load_config()
-        if bepaal_uitvoerder(cfg, cfg.get("username", "")) == "rbruyn1":
+        # Fallback "" (niet cfg["username"]): onbekende Windows-accounts vielen
+        # anders terug op "rbruyn1" en zagen deze logs dus ook.
+        if bepaal_uitvoerder(cfg, "") == "rbruyn1":
             bestanden.append({"id": "ro_sheets_wo", "naam": "RO Formulier-WO's",
                               "pad": basis / "logs" / "ro_sheets_wo.log"})
+            bestanden.append({"id": "comserver", "naam": "Com-Server resets",
+                              "pad": basis / "logs" / "comserver.log"})
     except Exception as e:
         log.warning(f"Kon gebruiker voor logzichtbaarheid niet bepalen: {e}")
     return bestanden

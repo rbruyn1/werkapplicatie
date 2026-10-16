@@ -16,10 +16,24 @@ from __future__ import annotations
 import socket
 import threading
 import time
+from datetime import datetime
+from pathlib import Path
 
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
 
 _slot = threading.Lock()   # nooit twee resets tegelijk
+
+LOG_PAD = Path(__file__).parent / "logs" / "comserver.log"
+
+
+def schrijf_log(msg: str) -> None:
+    """Schrijft een regel naar logs/comserver.log (zelfde formaat als de andere logs)."""
+    try:
+        LOG_PAD.parent.mkdir(exist_ok=True)
+        with open(LOG_PAD, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%d/%m/%Y %H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
 
 
 class _Telnet:
@@ -97,15 +111,17 @@ def reset_comserver(ip: str, wachtwoord: str = "", poort: int = 23,
 
     def log(msg: str):
         regels.append(msg)
+        schrijf_log(f"{ip}: {msg}")
         if stap_log:
             stap_log(msg)
 
     if not _slot.acquire(blocking=False):
+        schrijf_log(f"{ip}: reset overgeslagen — er loopt al een Com-Server reset")
         return {"ok": False, "fout": "Er loopt al een Com-Server reset", "log": regels}
 
     tn = None
     try:
-        log(f"Com-Server {ip}: verbinden (telnet {poort})...")
+        log(f"verbinden (telnet {poort})...")
         try:
             tn = _Telnet(ip, poort, timeout)
         except OSError as e:
@@ -138,7 +154,7 @@ def reset_comserver(ip: str, wachtwoord: str = "", poort: int = 23,
         tn.stuur("Y")
         # De Com-Server sluit de verbinding zodra hij herstart.
         tn.wacht_op(lambda b: False, 3.0)
-        log(f"Com-Server {ip}: reset verstuurd")
+        log("reset verstuurd")
         return {"ok": True, "fout": None, "log": regels}
     except Exception as e:
         return {"ok": False, "fout": str(e), "log": regels}
