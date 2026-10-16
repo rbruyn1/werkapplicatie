@@ -1171,15 +1171,17 @@ def _comserver_bestand_pad(cfg: dict, naam: str) -> Path:
 
 
 def _comserver_leeftijd_min(cfg: dict, cs: dict):
-    """Minuten sinds de laatste wijziging van de MEEST recente data van deze
-    Com-Server. None als er geen (leesbaar) bestand is of niets ingesteld."""
+    """Minuten sinds de laatste wijziging van het OUDSTE bestand van deze
+    Com-Server: één poort die stilvalt volstaat om te resetten (ook als de
+    andere poorten nog data leveren). None als er geen (leesbaar) bestand is
+    of niets ingesteld."""
     leeftijden = []
     for naam in cs.get("bestanden") or []:
         try:
             leeftijden.append((_time.time() - _comserver_bestand_pad(cfg, naam).stat().st_mtime) / 60)
         except OSError:
             continue
-    return min(leeftijden) if leeftijden else None
+    return max(leeftijden) if leeftijden else None
 
 
 def _comserver_reset_uitvoeren(cs: dict) -> dict:
