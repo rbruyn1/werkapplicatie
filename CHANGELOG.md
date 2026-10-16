@@ -12,6 +12,8 @@ historiek).
   formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964
   stand waterteller, 0000001965 Soft Control, 0000001966 geleidbaarheid,
   0000001967 controle hittedesinfectie, 0000001968 opmerkingen (in die volgorde).
+- De commentaar van het WO bevat het aantal zakken zout niet meer ("Zout aangevuld +
+  algemene controle — ingave formulier …"): dat staat nu in de taak 0000001962.
 - Een leeg veld of "nvt" (ook "NVT", "n vt", "n.v.t.") geeft géén taaklijn. Andere
   waarden, ook "0", wel. Regeleinden in opmerkingen worden een spatie en de tekst
   wordt begrensd op 250 tekens (wordt gelogd).

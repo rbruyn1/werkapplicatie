@@ -274,9 +274,8 @@ async def maak_wo_ro_controle(page, naam: str, maximo: str, rij: dict,
         if stap_log:
             stap_log(msg)
 
-    zakken = rij.get("zakken_zout", "")
-    commentaar = (f"Zout aangevuld ({zakken} zakken) + algemene controle "
-                  if zakken else "Zout aangevuld + algemene controle ")
+    # Aantal zakken staat in de taaklijnen (0000001962), niet meer in de commentaar
+    commentaar = "Zout aangevuld + algemene controle "
     commentaar += f"— ingave formulier {rij['tijdstempel']}"
     if rij.get("registratie_door"):
         commentaar += f" door {rij['registratie_door']}"
