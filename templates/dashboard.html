@@ -269,6 +269,17 @@
   .hr-sub-temp.alarm { background: #ff616122; border-color: #ff6961; color: #ff6961; animation: pulse 1.5s ease-in-out infinite; }
   .hr-sub-phase { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
   .hr-sub-ts { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+  .cs-btn { font-family: var(--mono); font-size: 13px; padding: 5px 12px; border-radius: 3px; border: 1px solid var(--border); color: var(--muted); background: none; cursor: pointer; transition: all .15s; user-select: none; font-weight: 700; white-space: nowrap; }
+  .cs-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cs-menu { position: fixed; z-index: 9999; width: 380px; max-width: calc(100vw - 16px); background: #fff; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 10px; font-size: 13px; }
+  .cs-menu-titel { font-weight: 700; margin-bottom: 8px; }
+  .cs-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; margin-bottom: 6px; cursor: pointer; }
+  .cs-item:hover { border-color: var(--accent); background: rgba(0,0,0,.03); }
+  .cs-item span { color: var(--muted); font-size: 12px; }
+  .cs-ok { color: #2e8b57; font-weight: 700; }
+  .cs-fout { color: #c0392b; font-weight: 700; }
+  .cs-bezig { color: var(--muted); }
+  .cs-log { margin: 8px 0 0; padding: 8px; background: rgba(0,0,0,.05); border-radius: 4px; font-size: 11px; white-space: pre-wrap; max-height: 160px; overflow: auto; }
 </style>
 </head>
 <body>
@@ -604,6 +615,9 @@
     // ── Radio knop — altijd zichtbaar ──
     const sep2 = document.createElement('span'); sep2.className='filter-sep'; sep2.textContent='|'; bar.appendChild(sep2);
 
+    // ── Com-Server reset knop ──
+    bar.appendChild(buildComserverBtn());
+
     // Radio wrapper (controls bovenaan, nowplaying eronder)
     const radioWrap = document.createElement('div');
     radioWrap.className = 'radio-wrap';
@@ -706,6 +720,69 @@
       const currentLabel = stations.find(s => s.value === radioStation)?.label || radioStation;
       nowPlaying.innerHTML = `♪ <span class="radio-song">${currentLabel}</span>`;
       radioWrap.appendChild(nowPlaying);
+    }
+  }
+
+  // ── Com-Server reset (W&T serieel <-> UTP, via telnet op de logging-pc) ──
+  const csEsc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function buildComserverBtn() {
+    const b = document.createElement('button');
+    b.className = 'cs-btn';
+    b.id = 'cs-btn';
+    b.title = 'Com-Server (serieel naar UTP) resetten via telnet';
+    b.textContent = '🔌 Com-Server reset';
+    b.onclick = (e) => { e.stopPropagation(); toggleComserverMenu(b); };
+    return b;
+  }
+
+  document.addEventListener('click', ev => {
+    const m = document.getElementById('cs-menu');
+    if (m && !m.contains(ev.target)) m.remove();
+  });
+
+  async function toggleComserverMenu(btn) {
+    let m = document.getElementById('cs-menu');
+    if (m) { m.remove(); return; }
+    m = document.createElement('div');
+    m.id = 'cs-menu';
+    m.className = 'cs-menu';
+    m.innerHTML = '<div class="cs-menu-titel">Com-Server resetten</div><div class="cs-menu-body cs-bezig">Laden…</div>';
+    const r = btn.getBoundingClientRect();
+    m.style.top  = (r.bottom + 6) + 'px';
+    m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 396)) + 'px';
+    document.body.appendChild(m);
+    const body = m.querySelector('.cs-menu-body');
+    try {
+      const d = await (await fetch('/api/comserver')).json();
+      body.className = 'cs-menu-body';
+      body.innerHTML = '';
+      d.comservers.forEach(cs => {
+        const it = document.createElement('div');
+        it.className = 'cs-item';
+        const leeftijd = cs.data_leeftijd_min == null ? '' : ` · oudste data ${cs.data_leeftijd_min} min`;
+        it.innerHTML = `<b>${csEsc(cs.naam)}</b><span>${csEsc(cs.ip)}${leeftijd}</span>`;
+        it.onclick = () => comserverReset(cs, body);
+        body.appendChild(it);
+      });
+    } catch (e) {
+      body.className = 'cs-menu-body cs-fout';
+      body.textContent = 'Lijst laden mislukt: ' + e;
+    }
+  }
+
+  async function comserverReset(cs, body) {
+    if (!confirm(`${cs.naam} (${cs.ip}) resetten?\n\nAlle seriële poorten op deze Com-Server worden even onderbroken.`)) return;
+    body.innerHTML = '<div class="cs-bezig">Reset bezig… (kan tot ±30 s duren)</div>';
+    try {
+      const resp = await fetch('/api/comserver/reset', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip: cs.ip})
+      });
+      const d = await resp.json();
+      body.innerHTML = `<div class="${d.ok ? 'cs-ok' : 'cs-fout'}">${d.ok ? '✓ Reset verstuurd naar ' + csEsc(cs.naam) : '✗ ' + csEsc(d.fout || 'Mislukt')}</div>`
+        + (d.log && d.log.length ? `<pre class="cs-log">${csEsc(d.log.join('\n'))}</pre>` : '');
+    } catch (e) {
+      body.innerHTML = `<div class="cs-fout">✗ ${csEsc(String(e))}</div>`;
     }
   }
 

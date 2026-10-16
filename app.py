@@ -1187,7 +1187,7 @@ def _comserver_leeftijd_min(cfg: dict, cs: dict, met_naam: bool = False):
     return oudste if met_naam else oudste[0]
 
 
-def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig") -> dict:
+def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig", vanaf: str = "") -> dict:
     from comserver import reset_comserver, schrijf_log
     hostname = socket.gethostname()
     naam = cs.get("naam", cs["ip"])
@@ -1196,7 +1196,8 @@ def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig") -> dict:
         log.warning(fout)
         schrijf_log(f"{cs['ip']}: {fout}")
         return {"ok": False, "fout": fout, "log": [], "pc": hostname}
-    schrijf_log(f"{cs['ip']}: '{naam}' — {bron}e reset gestart (pc {hostname})")
+    schrijf_log(f"{cs['ip']}: '{naam}' — {bron}e reset gestart (pc {hostname}"
+                + (f", aangevraagd vanaf {vanaf}" if vanaf else "") + ")")
     res = reset_comserver(cs["ip"], wachtwoord=cs.get("wachtwoord", ""))
     schrijf_log(f"{cs['ip']}: resultaat: " + ("OK" if res["ok"] else f"MISLUKT — {res['fout']}"))
     (log.warning if res["ok"] else log.error)(
@@ -1228,7 +1229,24 @@ def api_comserver_reset():
     cs = next((c for c in _comservers() if c["ip"] == ip), None)
     if not cs:
         return jsonify({"ok": False, "fout": f"Onbekende Com-Server '{ip}'"}), 400
-    res = _comserver_reset_uitvoeren(cs, "handmatig")
+    if socket.gethostname().upper() != COMSERVER_RESET_PC and not request.headers.get("X-Comserver-Forward"):
+        # Niet de logging-pc: de reset moet daar uitgevoerd worden -> doorsturen,
+        # zodat de knop in het dashboard op elke pc werkt.
+        try:
+            import requests as _rq
+            poort = load_config().get("server_port", 5000)
+            r = _rq.post(f"http://{COMSERVER_RESET_PC}:{poort}/api/comserver/reset",
+                         json={"ip": ip}, headers={"X-Comserver-Forward": "1"}, timeout=45)
+            try:
+                return jsonify(r.json()), r.status_code
+            except ValueError:
+                return jsonify({"ok": False, "log": [],
+                                "fout": f"Onverwacht antwoord van {COMSERVER_RESET_PC} "
+                                        f"(HTTP {r.status_code}) — is de app daar bijgewerkt?"}), 502
+        except Exception as e:
+            return jsonify({"ok": False, "log": [],
+                            "fout": f"{COMSERVER_RESET_PC} niet bereikbaar: {e}"}), 502
+    res = _comserver_reset_uitvoeren(cs, "handmatig", vanaf=request.remote_addr or "")
     res["naam"] = cs.get("naam", ip)
     return jsonify(res), (200 if res["ok"] else 500)
 
