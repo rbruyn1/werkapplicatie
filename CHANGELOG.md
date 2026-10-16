@@ -9,19 +9,28 @@ historiek).
 
 ### RO-formulieren: taken op het werkorder
 - Het automatisch aangemaakte WO krijgt nu taaklijnen met de tekstwaarden uit het
-  formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964 stand
-  waterteller, 0000001965 Soft Control, 0000001966 geleidbaarheid, 0000001967
-  controle hittedesinfectie, 0000001968 opmerkingen. Lege velden of "nvt" (ook "NVT", "n vt", "n.v.t.") → geen taaklijn.
-- De kolom wordt in de sheet gezocht op een deel van de header (zie `TAKEN` in
-  `wo_ro_sheets.py`); per taak overschrijfbaar via `ro_sheets.taak_kolommen`
-  (`{"0000001963": "zoekwoord"}`). Wordt een kolom niet gevonden, dan staat dat in
-  `logs/ro_sheets_wo.log` samen met de headers.
-- Na het opslaan (UITGEV) worden de taak-ID's teruggelezen en vergeleken; bij een
-  afwijking volgt dezelfde alert als bij een andere fout.
-- `ro_sheets.taken_toevoegen: false` schakelt dit uit. Dry-run logt de taken.
-- Kolommen worden spatie-ongevoelig gezocht ("Controle SoftControl" wordt gevonden). Regeleinden in
-  opmerkingen worden vervangen door een spatie en tekst wordt begrensd op 250 tekens.
-- Nieuwe gedeelde helpers in `wo_aanmaken.py`: `vul_taaklijnen_tekst`, `lees_taak_ids`.
+  formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964
+  stand waterteller, 0000001965 Soft Control, 0000001966 geleidbaarheid,
+  0000001967 controle hittedesinfectie, 0000001968 opmerkingen (in die volgorde).
+- Een leeg veld of "nvt" (ook "NVT", "n vt", "n.v.t.") geeft géén taaklijn. Andere
+  waarden, ook "0", wel. Regeleinden in opmerkingen worden een spatie en de tekst
+  wordt begrensd op 250 tekens (wordt gelogd).
+- De kolom wordt in de sheet gezocht op een deel van de header, hoofdletter- en
+  spatie-ongevoelig (zie `TAKEN` in `wo_ro_sheets.py`; "Controle SoftControl" wordt
+  gevonden met "softcontrol"). Per taak overschrijfbaar via `ro_sheets.taak_kolommen`
+  (`{"0000001963": "zoekwoord"}`). Wordt een kolom niet gevonden, dan staat dat met
+  de headers in `logs/ro_sheets_wo.log` en wordt die taak overgeslagen.
+- De taken worden ingevuld vóór het definitief opslaan (UITGEV). Daarna worden de
+  taak-ID's teruggelezen en vergeleken. Lukt het invullen niet (taak niet herkend,
+  taaklijn 0 al ingevuld) of klopt de controle niet, dan volgt de popup-alert zoals
+  bij andere fouten en moet het WO manueel nagekeken worden: het staat dan mogelijk
+  nog op INUITV, zonder werkuren.
+- Ingaven die vóór deze wijziging al verwerkt waren (`ro_sheets_staat.json`) krijgen
+  niet achteraf taken.
+- `ro_sheets.taken_toevoegen: false` schakelt dit uit. Dry-run logt de taken die
+  aangemaakt zouden worden.
+- Nieuwe gedeelde helpers in `wo_aanmaken.py`: `vul_taaklijnen_tekst` en
+  `lees_taak_ids`. `dialyse_resultaten.py` is ongewijzigd.
 
 ### RO-formulieren → automatisch werkorder (eerste versie)
 - Nieuwe module `wo_ro_sheets.py`: pollt elke 5 minuten de Google Sheets achter
