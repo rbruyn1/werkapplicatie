@@ -3549,15 +3549,13 @@ def _log_bestanden() -> list[dict]:
         {"id": "ccs_wo",           "naam": "CCS Werkorders",      "pad": basis / "logs" / "ccs_wo.log"},
         {"id": "ess_bestelling",   "naam": "ESS Bestellingen",    "pad": basis / "logs" / "ess_bestelling.log"},
     ]
-    # Enkel zichtbaar voor rbruyn1 (= gebruiker van deze PC, zie uitvoerder_utils;
-    # op de master-pc onder sa_water wordt dat ook rbruyn1). Voor iedereen anders
-    # ontbreekt het in de lijst én geeft het lees-endpoint een 404.
+    # Enkel zichtbaar als het WINDOWS-account van deze pc "rbruyn1" is (dus niet
+    # voor sa_water op de master-pc, en niet voor collega's of onbekende
+    # accounts). Voor iedereen anders ontbreken ze in de lijst én geeft het
+    # lees-endpoint een 404.
     try:
-        from uitvoerder_utils import bepaal_uitvoerder
-        cfg = load_config()
-        # Fallback "" (niet cfg["username"]): onbekende Windows-accounts vielen
-        # anders terug op "rbruyn1" en zagen deze logs dus ook.
-        if bepaal_uitvoerder(cfg, "") == "rbruyn1":
+        import getpass
+        if getpass.getuser().lower() == "rbruyn1":
             bestanden.append({"id": "ro_sheets_wo", "naam": "RO Formulier-WO's",
                               "pad": basis / "logs" / "ro_sheets_wo.log"})
             bestanden.append({"id": "comserver", "naam": "Com-Server resets",
