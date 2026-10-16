@@ -956,6 +956,81 @@ async def verwerk_selectie(td_nummers: list[int], stap_log=None) -> list[dict]:
     return resultaten
 
 
+# ── Taaklijnen (tekstwaarden) op de Rapportage-tab ────────────────────────────
+async def vul_taaklijnen_tekst(frame, taken: list[dict], log) -> dict:
+    """
+    Vul taaklijnen in op de Rapportage-tab van een WO. Elke taak is
+    {"id": "0000001963", "waarde": "2,5", "label": "Ingangsdruk"} en krijgt een
+    eigen lijn (0, 1, 2, ...) met de waarde in het tekstveld (UZ_WAARDE_TEKST).
+
+    Zelfde klikvolgorde als de staalname-resultaten (dialyse_resultaten.py):
+    lijn 0 bestaat al, voor elke volgende lijn eerst '+' (nieuwe taaklijn) klikken.
+    Geeft {"ok": bool, "ingevuld": [taak-id's], "fout": str|None} terug.
+    Slaat zelf NIET op — dat doet de aanroeper.
+    """
+    def _id(prefix, nr):
+        return f'[id="{prefix}${nr}"]'
+
+    if not taken:
+        return {"ok": True, "ingevuld": [], "fout": None}
+
+    # Lijn 0 moet leeg zijn, anders overschrijven we bestaande taken niet
+    try:
+        bestaand = (await frame.locator(_id("UZFM_WO_TAAK_UZ_TAAK_ID", 0)).inner_text(timeout=3_000)).strip()
+    except Exception:
+        bestaand = ""
+    if len(bestaand) >= 2:
+        log(f"  TAKEN: ⚠ taaklijn 0 al ingevuld ({bestaand}) — taken NIET toegevoegd")
+        return {"ok": False, "ingevuld": [], "fout": f"Taaklijn 0 was al ingevuld ({bestaand})"}
+
+    ingevuld = []
+    for lijn_nr, t in enumerate(taken):
+        try:
+            if lijn_nr > 0:
+                prev = lijn_nr - 1
+                log(f"  TAKEN: nieuwe taaklijn toevoegen (lijn {lijn_nr})")
+                await frame.click(f'[id="UZFM_WO_TAAK$new${prev}$$0"]')
+                await frame.wait_for_selector(_id("UZ_CHANGED_BY", lijn_nr),
+                                              state="visible", timeout=15_000)
+
+            log(f"  TAKEN: lijn {lijn_nr}: taak={t['id']} [{t.get('label', '')}] ← '{t['waarde']}'")
+            await frame.type(_id("UZFM_WO_TAAK_UZ_TAAK_ID", lijn_nr), t["id"], delay=80)
+            await frame.click("#UZFM_WO_WRK_UZ_WO_COMMENT")   # focus weg → taak wordt opgezocht
+            await asyncio.sleep(1)
+            for _ in range(5):
+                try:
+                    omschr = (await frame.locator(_id("UZFM_WO_TAAKDVW_UZ_OMSCHR150", lijn_nr))
+                              .inner_text(timeout=2_000)).strip()
+                    if omschr:
+                        log(f"  TAKEN: lijn {lijn_nr}: omschrijving = '{omschr}'")
+                        break
+                except Exception:
+                    pass
+                await asyncio.sleep(1)
+            else:
+                raise RuntimeError(f"taak {t['id']} niet herkend door PeopleSoft (geen omschrijving)")
+
+            await frame.type(_id("UZFM_WO_WRK_UZ_WAARDE_TEKST", lijn_nr), t["waarde"], delay=80)
+            await asyncio.sleep(0.5)
+            ingevuld.append(t["id"])
+        except Exception as e:
+            log(f"  TAKEN: ❌ lijn {lijn_nr} (taak {t['id']}): {e}")
+            return {"ok": False, "ingevuld": ingevuld, "fout": f"taak {t['id']}: {e}"}
+    return {"ok": True, "ingevuld": ingevuld, "fout": None}
+
+
+async def lees_taak_ids(frame, aantal: int) -> list[str]:
+    """Leest de taak-ID's van lijn 0..aantal-1 (voor verificatie na opslaan)."""
+    ids = []
+    for i in range(aantal):
+        try:
+            ids.append((await frame.locator(f'[id="UZFM_WO_TAAK_UZ_TAAK_ID${i}"]')
+                        .inner_text(timeout=3_000)).strip())
+        except Exception:
+            ids.append("")
+    return ids
+
+
 # ── CLI voor testen ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import sys

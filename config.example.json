@@ -36,6 +36,7 @@
     "interval_seconden": 300,
     "uitvoerder_oprid": "rbruyn1",
     "uren": "1",
+    "taken_toevoegen": true,
     "installaties": [
       {
         "naam": "RO1 465",

@@ -27,6 +27,8 @@ Configuratie in config.json:
       "interval_seconden": 300,
       "uitvoerder_oprid": "rbruyn1",
       "uren": "1",
+      "taken_toevoegen": true,
+      "taak_kolommen": {"0000001963": "ingangsdruk"},
       "installaties": [
         {"naam": "RO1 465", "maximo": "T......", "csv_url": "https://..."},
         ...
@@ -34,6 +36,12 @@ Configuratie in config.json:
     }
 
 Ontbreekt 'maximo', dan wordt het opgezocht in ro_staalname.json op 'naam'.
+
+Taken (tekstwaarden uit het formulier → taaklijnen op het WO):
+  Per TAKEN-lijn hieronder wordt de kolom in de sheet gezocht waarvan de header
+  het zoekwoord bevat (hoofdletterongevoelig). Met "taak_kolommen" in config.json
+  kan het zoekwoord per TaakID overschreven worden. Lege velden → geen taaklijn.
+  "taken_toevoegen": false schakelt dit uit (enkel nog commentaar + werkuren).
 """
 
 import asyncio
@@ -55,6 +63,18 @@ LOG_PAD    = LOG_DIR / "ro_sheets_wo.log"
 RO_DATA    = BASIS / "ro_staalname.json"
 
 OMSCHRIJVING = "Aanvullen zout + algemene controle"
+
+# TaakID's (PeopleSoft) ↔ kolom in het formulier. Volgorde = volgorde van de taaklijnen.
+# 'kolom' = zoekwoord in de header van de sheet (overschrijfbaar via config 'taak_kolommen').
+TAKEN = [
+    {"id": "0000001962", "label": "Aantal zakken zout",        "kolom": "zakken zout"},
+    {"id": "0000001963", "label": "Ingangsdruk",               "kolom": "ingangsdruk"},
+    {"id": "0000001964", "label": "Stand waterteller",         "kolom": "waterteller"},
+    {"id": "0000001965", "label": "Soft Control",              "kolom": "soft control"},
+    {"id": "0000001966", "label": "Geleidbaarheid",            "kolom": "geleidbaarheid"},
+    {"id": "0000001967", "label": "Controle hittedesinfectie", "kolom": "hittedesinfectie"},
+    {"id": "0000001968", "label": "Opmerkingen",               "kolom": "opmerking"},
+]
 
 _staat_lock = threading.Lock()
 
@@ -138,6 +158,16 @@ def _haal_rijen(csv_url: str) -> list[dict]:
     if i_ts is None:
         raise RuntimeError(f"Kolom 'Tijdstempel' niet gevonden in header: {kop[:5]}")
 
+    # Kolom per taak zoeken (zoekwoord uit TAKEN, evt. overschreven in config)
+    overschrijf = lees_config().get("taak_kolommen", {}) or {}
+    i_taak = {}
+    for t in TAKEN:
+        zoek = str(overschrijf.get(t["id"], t["kolom"])).strip().lower()
+        i_taak[t["id"]] = kol(zoek)
+        if i_taak[t["id"]] is None:
+            _schrijf_log(f"⚠ Geen kolom voor taak {t['id']} ({t['label']}) — zoekwoord '{zoek}' "
+                         f"komt in geen header voor: {kop}")
+
     ts_patroon = re.compile(r"^\d{1,2}-\d{1,2}-\d{4}\s+\d{1,2}:\d{2}:\d{2}$")
     rijen = []
     for rij in lezer:
@@ -150,6 +180,8 @@ def _haal_rijen(csv_url: str) -> list[dict]:
             "tijdstempel": ts,
             "zakken_zout": rij[i_zout].strip() if i_zout is not None and len(rij) > i_zout else "",
             "registratie_door": rij[i_door].strip() if i_door is not None and len(rij) > i_door else "",
+            "taken": {tid: (rij[i].strip() if i is not None and len(rij) > i else "")
+                      for tid, i in i_taak.items()},
         })
     return rijen
 
@@ -198,17 +230,24 @@ def markeer(naam: str, tijdstempel: str, resultaat: dict) -> None:
         _schrijf_staat(staat)
 
 
+def bouw_taaklijst(rij: dict) -> list[dict]:
+    """Taken met een ingevulde waarde, in TAKEN-volgorde. Lege velden worden overgeslagen."""
+    waarden = rij.get("taken", {}) or {}
+    return [{"id": t["id"], "label": t["label"], "waarde": waarden[t["id"]]}
+            for t in TAKEN if waarden.get(t["id"], "").strip()]
+
+
 # ── PeopleSoft: WO aanmaken ──────────────────────────────────────────────────
 async def maak_wo_ro_controle(page, naam: str, maximo: str, rij: dict,
                               oprid: str, uren: str, naam_volledig: str = "",
-                              stap_log=None) -> dict:
+                              stap_log=None, taken_toevoegen: bool = True) -> dict:
     """
     Maak en rond een WO af: "Aanvullen zout + algemene controle" met werkuren.
     Zelfde stappen als wo_aanmaken.maak_wo_ccs_container (type AO, bron MAN,
     status UITGEV), maar met T-nummer van de RO-installatie.
     """
     from wo_aanmaken import (WO_NIEUW_URL, wacht_op_element, zoek_win1_frame,
-                             vul_werkuren_lijn)
+                             vul_werkuren_lijn, vul_taaklijnen_tekst, lees_taak_ids)
 
     def log_(msg):
         _schrijf_log(f"{naam}: {msg}")
@@ -329,6 +368,15 @@ async def maak_wo_ro_controle(page, naam: str, maximo: str, rij: dict,
         await vul_werkuren_lijn(tc, 0, {"oprid": oprid, "naam": naam_volledig},
                                 log=log_, uren=uren)
 
+        # Taaklijnen (tekstwaarden uit het formulier)
+        taaklijst = bouw_taaklijst(rij) if taken_toevoegen else []
+        if taaklijst:
+            log_(f"Stap 6b: {len(taaklijst)} taak/taken invullen")
+            tres = await vul_taaklijnen_tekst(tc, taaklijst, log=log_)
+            if not tres["ok"]:
+                raise RuntimeError(f"Taken invullen mislukt: {tres['fout']} — WO {wo_id} NIET afgerond, "
+                                   f"nakijken in PeopleSoft")
+
         # Definitief opslaan → UITGEV
         await page.click('[id="#ICSave"]')
         await asyncio.sleep(2)
@@ -344,6 +392,15 @@ async def maak_wo_ro_controle(page, naam: str, maximo: str, rij: dict,
         log_(f"Stap 7: eindstatus = '{eindstatus}'")
         if eindstatus != "UITGEV":
             raise RuntimeError(f"WO {wo_id} bleef op status '{eindstatus}' i.p.v. UITGEV — nakijken in PeopleSoft")
+
+        if taaklijst:
+            tc = await zoek_win1_frame(page, log=log_)
+            verwacht = [t["id"] for t in taaklijst]
+            gelezen = await lees_taak_ids(tc, len(verwacht))
+            log_(f"Stap 8: taken na opslaan = {gelezen}")
+            if gelezen != verwacht:
+                raise RuntimeError(f"WO {wo_id} UITGEV maar taken niet zoals verwacht "
+                                   f"(verwacht {verwacht}, gelezen {gelezen}) — nakijken in PeopleSoft")
 
         log_(f"✓ WO {wo_id} afgerond")
         return {"ok": True, "wo_id": wo_id, "status": eindstatus, "fout": None}
@@ -363,6 +420,7 @@ async def _verwerk_batch(taken: list[dict], cfg: dict, stap_log=None) -> None:
 
     oprid = cfg.get("uitvoerder_oprid", "rbruyn1")
     uren  = str(cfg.get("uren", "1"))
+    taken_toevoegen = bool(cfg.get("taken_toevoegen", True))
     naam_volledig = next((u.get("naam", "") for u in PS_USERS if u.get("oprid") == oprid), "")
 
     async with async_playwright() as pw:
@@ -377,7 +435,8 @@ async def _verwerk_batch(taken: list[dict], cfg: dict, stap_log=None) -> None:
             for t in taken:
                 res = await maak_wo_ro_controle(
                     page, t["naam"], t["maximo"], t["rij"], oprid, uren,
-                    naam_volledig=naam_volledig, stap_log=stap_log)
+                    naam_volledig=naam_volledig, stap_log=stap_log,
+                    taken_toevoegen=taken_toevoegen)
                 t["resultaat"] = res
                 markeer(t["naam"], t["rij"]["tijdstempel"], res)
                 await asyncio.sleep(1)
@@ -438,6 +497,9 @@ def poll_en_verwerk(on_fout=None) -> dict:
             if dry_run:
                 _schrijf_log(f"{naam}: DRY-RUN — zou WO '{OMSCHRIJVING}' aanmaken op {maximo} "
                              f"met {cfg.get('uren', '1')}u voor {cfg.get('uitvoerder_oprid', 'rbruyn1')}")
+                if cfg.get("taken_toevoegen", True):
+                    for t in bouw_taaklijst(rij):
+                        _schrijf_log(f"{naam}: DRY-RUN —   taak {t['id']} [{t['label']}] = '{t['waarde']}'")
                 markeer(naam, rij["tijdstempel"], {"ok": True, "dry_run": True})
                 continue
             taken.append({"naam": naam, "maximo": maximo, "rij": rij})

@@ -7,6 +7,20 @@ historiek).
 
 ## 2026-10-16
 
+### RO-formulieren: taken op het werkorder
+- Het automatisch aangemaakte WO krijgt nu taaklijnen met de tekstwaarden uit het
+  formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964 stand
+  waterteller, 0000001965 Soft Control, 0000001966 geleidbaarheid, 0000001967
+  controle hittedesinfectie, 0000001968 opmerkingen. Lege velden → geen taaklijn.
+- De kolom wordt in de sheet gezocht op een deel van de header (zie `TAKEN` in
+  `wo_ro_sheets.py`); per taak overschrijfbaar via `ro_sheets.taak_kolommen`
+  (`{"0000001963": "zoekwoord"}`). Wordt een kolom niet gevonden, dan staat dat in
+  `logs/ro_sheets_wo.log` samen met de headers.
+- Na het opslaan (UITGEV) worden de taak-ID's teruggelezen en vergeleken; bij een
+  afwijking volgt dezelfde alert als bij een andere fout.
+- `ro_sheets.taken_toevoegen: false` schakelt dit uit. Dry-run logt de taken.
+- Nieuwe gedeelde helpers in `wo_aanmaken.py`: `vul_taaklijnen_tekst`, `lees_taak_ids`.
+
 ### RO-formulieren → automatisch werkorder (eerste versie)
 - Nieuwe module `wo_ro_sheets.py`: pollt elke 5 minuten de Google Sheets achter
   de RO-formulieren (RO1 465, RO2 465, RO 304) en maakt voor elke nieuwe ingave
