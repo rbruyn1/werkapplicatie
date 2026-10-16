@@ -743,6 +743,7 @@ def start_background_scraper():
         log.error(f"Fout bij initieel schrijven hr_log_data.json: {e}")
     start_hr_log_loop(interval)
     start_ccs_log_loop(interval)
+    start_comserver_watch()
     start_ro_sheets_loop(stop_event)
 
 
@@ -1132,6 +1133,152 @@ def _ccs_groep_van_container(container: str) -> str:
     """'container 2.1' -> '2'"""
     deel = (container or "").strip().split()[-1] if container else ""
     return deel.split(".")[0] if "." in deel else ""
+
+
+# ══════════════════════════════════════════════════════════════════
+# COM-SERVER RESET (W&T serieel <-> netwerk, via telnet)
+# ══════════════════════════════════════════════════════════════════
+# Als de seriële verbinding naar de UTP uitvalt, houdt de data (RO/HR/CCS-logs)
+# op met bijwerken. De W&T Com-Server kan dan via telnet gereset worden
+# (menu 2 -> 7 -> Y), net als manueel via WuTility/PuTTY. Enkel op de
+# logging-pc, en alleen naar IP's die hieronder/in config.json staan.
+COMSERVER_RESET_PC = "UZLDT11866"
+COMSERVER_STAAT_PAD = Path(__file__).parent / "comserver_staat.json"
+DEFAULT_COMSERVERS = [
+    {"naam": "Com-Server Highspeed Office", "ip": "192.168.10.10"},
+    {"naam": "Com-Server Highspeed",        "ip": "192.168.10.11"},
+]
+# config.json (optioneel) — automatische reset staat pas aan zodra "bestanden"
+# is ingevuld:
+#   "comservers": [{"naam": "...", "ip": "192.168.10.10", "wachtwoord": "",
+#                   "bestanden": ["RO1 465", "RO2 465"],   # naam uit ro_logs/hr_logs,
+#                                                          # "ccs_log" of een pad
+#                   "stale_minuten": 15, "cooldown_minuten": 60}]
+COMSERVER_MAX_PER_DAG = 3
+
+
+def _comservers() -> list[dict]:
+    return load_config().get("comservers") or DEFAULT_COMSERVERS
+
+
+def _comserver_bestand_pad(cfg: dict, naam: str) -> Path:
+    if naam == "ccs_log":
+        return Path(cfg.get("ccs_log", ""))
+    for sleutel in ("ro_logs", "hr_logs"):
+        if naam in (cfg.get(sleutel) or {}):
+            return Path(cfg[sleutel][naam])
+    return Path(naam)
+
+
+def _comserver_leeftijd_min(cfg: dict, cs: dict):
+    """Minuten sinds de laatste wijziging van de MEEST recente data van deze
+    Com-Server. None als er geen (leesbaar) bestand is of niets ingesteld."""
+    leeftijden = []
+    for naam in cs.get("bestanden") or []:
+        try:
+            leeftijden.append((_time.time() - _comserver_bestand_pad(cfg, naam).stat().st_mtime) / 60)
+        except OSError:
+            continue
+    return min(leeftijden) if leeftijden else None
+
+
+def _comserver_reset_uitvoeren(cs: dict) -> dict:
+    from comserver import reset_comserver
+    hostname = socket.gethostname()
+    if hostname.upper() != COMSERVER_RESET_PC:
+        fout = f"Com-Server reset geweigerd: alleen pc '{COMSERVER_RESET_PC}' mag dit (deze pc: '{hostname}')"
+        log.warning(fout)
+        return {"ok": False, "fout": fout, "log": [], "pc": hostname}
+    res = reset_comserver(cs["ip"], wachtwoord=cs.get("wachtwoord", ""))
+    (log.warning if res["ok"] else log.error)(
+        f"Com-Server '{cs.get('naam', cs['ip'])}' ({cs['ip']}) reset: "
+        f"{'OK' if res['ok'] else res['fout']}")
+    res["pc"] = hostname
+    return res
+
+
+@app.route("/api/comserver", methods=["GET"])
+def api_comserver_lijst():
+    cfg = load_config()
+    resp = []
+    for cs in _comservers():
+        leeftijd = _comserver_leeftijd_min(cfg, cs)
+        resp.append({
+            "naam": cs.get("naam", cs["ip"]), "ip": cs["ip"],
+            "auto": bool(cs.get("bestanden")),
+            "data_leeftijd_min": None if leeftijd is None else round(leeftijd, 1),
+        })
+    return jsonify({"ok": True, "comservers": resp, "host": socket.gethostname(),
+                    "reset_pc": COMSERVER_RESET_PC,
+                    "kan_resetten": socket.gethostname().upper() == COMSERVER_RESET_PC})
+
+
+@app.route("/api/comserver/reset", methods=["POST"])
+def api_comserver_reset():
+    ip = str((request.get_json(silent=True) or {}).get("ip", "")).strip()
+    cs = next((c for c in _comservers() if c["ip"] == ip), None)
+    if not cs:
+        return jsonify({"ok": False, "fout": f"Onbekende Com-Server '{ip}'"}), 400
+    res = _comserver_reset_uitvoeren(cs)
+    res["naam"] = cs.get("naam", ip)
+    return jsonify(res), (200 if res["ok"] else 500)
+
+
+def _comserver_controle_ronde(staat: dict):
+    cfg = load_config()
+    nu = _time.time()
+    for cs in _comservers():
+        if not cs.get("bestanden"):
+            continue                      # automatisch resetten is opt-in
+        naam, ip = cs.get("naam", cs["ip"]), cs["ip"]
+        leeftijd = _comserver_leeftijd_min(cfg, cs)
+        if leeftijd is None:
+            continue                      # share/bestanden niet bereikbaar: niets doen
+        st = staat.setdefault(ip, {"resets": [], "gemeld": False})
+        if leeftijd <= float(cs.get("stale_minuten", 15)):
+            st["gemeld"] = False          # data loopt weer: nieuwe episode mogelijk
+            continue
+        st["resets"] = [t for t in st["resets"] if nu - t < 86400]
+        cooldown = float(cs.get("cooldown_minuten", 60)) * 60
+        if st["resets"] and nu - st["resets"][-1] < cooldown:
+            continue
+        if len(st["resets"]) >= COMSERVER_MAX_PER_DAG:
+            if not st["gemeld"]:
+                st["gemeld"] = True
+                stuur_matrix_bericht(f"\u26a0\ufe0f {naam} ({ip}): data nog steeds niet bijgewerkt "
+                                     f"({leeftijd:.0f} min) na {COMSERVER_MAX_PER_DAG} automatische resets — manueel nakijken.")
+            continue
+        st["resets"].append(nu)           # eerst registreren: nooit lussen
+        res = _comserver_reset_uitvoeren(cs)
+        stuur_matrix_bericht(
+            f"\U0001f501 {naam} ({ip}): data {leeftijd:.0f} min niet bijgewerkt -> automatische reset "
+            + ("uitgevoerd." if res["ok"] else f"MISLUKT: {res['fout']}"))
+    try:
+        _schrijf_json_atomisch(COMSERVER_STAAT_PAD, staat)
+    except Exception as e:
+        log.error(f"Com-Server staat bewaren mislukt: {e}")
+
+
+def start_comserver_watch(interval_seconden: int = 60):
+    """Bewaakt (enkel op de logging-pc) of de data van de Com-Servers nog
+    bijgewerkt wordt en reset ze zo nodig automatisch."""
+    if socket.gethostname().upper() != COMSERVER_RESET_PC:
+        return
+    if not any(c.get("bestanden") for c in _comservers()):
+        log.info("Com-Server bewaking: geen 'bestanden' ingesteld in config.json (comservers) — enkel handmatig resetten")
+        return
+    staat = _lees_json_veilig(COMSERVER_STAAT_PAD, {})
+
+    def _loop():
+        while True:
+            _time.sleep(interval_seconden)
+            try:
+                _comserver_controle_ronde(staat)
+            except Exception as e:
+                log.error(f"Com-Server bewaking fout: {e}")
+
+    threading.Thread(target=_loop, daemon=True, name="comserver-watch").start()
+    log.info("Com-Server bewaking gestart")
 
 
 @app.route("/api/ccs/skip-bestelling", methods=["GET", "POST"])
