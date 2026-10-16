@@ -40,7 +40,7 @@ Ontbreekt 'maximo', dan wordt het opgezocht in ro_staalname.json op 'naam'.
 Taken (tekstwaarden uit het formulier → taaklijnen op het WO):
   Per TAKEN-lijn hieronder wordt de kolom in de sheet gezocht waarvan de header
   het zoekwoord bevat (hoofdletterongevoelig). Met "taak_kolommen" in config.json
-  kan het zoekwoord per TaakID overschreven worden. Lege velden → geen taaklijn.
+  kan het zoekwoord per TaakID overschreven worden. Lege velden of "nvt" → geen taaklijn.
   "taken_toevoegen": false schakelt dit uit (enkel nog commentaar + werkuren).
 """
 
@@ -239,14 +239,15 @@ def markeer(naam: str, tijdstempel: str, resultaat: dict) -> None:
 
 
 def bouw_taaklijst(rij: dict) -> list[dict]:
-    """Taken met een ingevulde waarde, in TAKEN-volgorde. Lege velden worden overgeslagen."""
+    """Taken met een ingevulde waarde, in TAKEN-volgorde. Lege velden en 'nvt' worden overgeslagen."""
     waarden = rij.get("taken", {}) or {}
     lijst = []
     for t in TAKEN:
         # Alle witruimte (ook regeleinden uit meerregelige opmerkingen) → één spatie:
         # een Enter in het enkelregelige PeopleSoft-veld zou ongewenste acties kunnen starten.
         waarde = " ".join(str(waarden.get(t["id"], "")).split())
-        if not waarde:
+        # Leeg of "nvt" (ook "NVT", "n vt", "n.v.t.") → géén taaklijn op het WO
+        if not waarde or re.sub(r"[\s.]", "", waarde).lower() == "nvt":
             continue
         if len(waarde) > TAAK_TEKST_MAX:
             _schrijf_log(f"⚠ Taak {t['id']} ({t['label']}): tekst van {len(waarde)} tekens ingekort "

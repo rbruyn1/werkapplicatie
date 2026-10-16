@@ -11,7 +11,7 @@ historiek).
 - Het automatisch aangemaakte WO krijgt nu taaklijnen met de tekstwaarden uit het
   formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964 stand
   waterteller, 0000001965 Soft Control, 0000001966 geleidbaarheid, 0000001967
-  controle hittedesinfectie, 0000001968 opmerkingen. Lege velden → geen taaklijn.
+  controle hittedesinfectie, 0000001968 opmerkingen. Lege velden of "nvt" (ook "NVT", "n vt", "n.v.t.") → geen taaklijn.
 - De kolom wordt in de sheet gezocht op een deel van de header (zie `TAKEN` in
   `wo_ro_sheets.py`); per taak overschrijfbaar via `ro_sheets.taak_kolommen`
   (`{"0000001963": "zoekwoord"}`). Wordt een kolom niet gevonden, dan staat dat in
