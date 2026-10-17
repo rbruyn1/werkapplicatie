@@ -1234,20 +1234,28 @@ def api_comserver_reset():
     if socket.gethostname().upper() != COMSERVER_RESET_PC and not request.headers.get("X-Comserver-Forward"):
         # Niet de logging-pc: de reset moet daar uitgevoerd worden -> doorsturen,
         # zodat de knop in het dashboard op elke pc werkt.
+        from comserver import schrijf_log
+        hostnaam = socket.gethostname()
+        schrijf_log(f"{ip}: reset aangevraagd op {hostnaam} (vanaf {request.remote_addr}) -> doorsturen naar {COMSERVER_RESET_PC}")
         try:
             import requests as _rq
             poort = load_config().get("server_port", 5000)
-            r = _rq.post(f"http://{COMSERVER_RESET_PC}:{poort}/api/comserver/reset",
-                         json={"ip": ip}, headers={"X-Comserver-Forward": "1"}, timeout=45)
+            sessie = _rq.Session()
+            sessie.trust_env = False    # interne pc: nooit via een (Windows-)proxy
+            r = sessie.post(f"http://{COMSERVER_RESET_PC}:{poort}/api/comserver/reset",
+                            json={"ip": ip}, headers={"X-Comserver-Forward": "1"},
+                            timeout=(5, 45))     # 5 s om te verbinden, 45 s voor de reset zelf
             try:
                 return jsonify(r.json()), r.status_code
             except ValueError:
-                return jsonify({"ok": False, "log": [],
-                                "fout": f"Onverwacht antwoord van {COMSERVER_RESET_PC} "
-                                        f"(HTTP {r.status_code}) — is de app daar bijgewerkt?"}), 502
+                fout = (f"Onverwacht antwoord van {COMSERVER_RESET_PC} (HTTP {r.status_code}) "
+                        f"— is de app daar bijgewerkt?")
+                schrijf_log(f"{ip}: doorsturen mislukt: {fout}")
+                return jsonify({"ok": False, "log": [], "fout": fout}), 502
         except Exception as e:
-            return jsonify({"ok": False, "log": [],
-                            "fout": f"{COMSERVER_RESET_PC} niet bereikbaar: {e}"}), 502
+            fout = f"{COMSERVER_RESET_PC}:{load_config().get('server_port', 5000)} niet bereikbaar vanaf {hostnaam}: {e}"
+            schrijf_log(f"{ip}: doorsturen mislukt: {fout}")
+            return jsonify({"ok": False, "log": [], "fout": fout}), 502
     res = _comserver_reset_uitvoeren(cs, "handmatig", vanaf=request.remote_addr or "")
     res["naam"] = cs.get("naam", ip)
     return jsonify(res), (200 if res["ok"] else 500)
