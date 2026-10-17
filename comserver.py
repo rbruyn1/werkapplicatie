@@ -42,13 +42,18 @@ def schrijf_log(msg: str) -> None:
         pass
 
 
+ECHO_OPT, SGA_OPT = 1, 3
+
+
 class _Telnet:
-    """Minimale telnet-client: weigert alle optie-onderhandelingen."""
+    """Minimale telnet-client: aanvaardt enkel ECHO en SGA van de server (zoals
+    PuTTY), weigert alle andere optie-onderhandelingen."""
 
     def __init__(self, ip: str, poort: int, timeout: float):
         self.sock = socket.create_connection((ip, poort), timeout=timeout)
         self.sock.settimeout(0.5)
         self.buf = ""
+        self.alles = ""          # alles wat ontvangen werd (enkel voor diagnose)
         self.gesloten = False
 
     def _lees(self):
@@ -70,7 +75,10 @@ class _Telnet:
                 cmd = data[i + 1]
                 if cmd in (DO, DONT, WILL, WONT) and i + 2 < len(data):
                     optie = data[i + 2]
-                    antwoord = WONT if cmd == DO else DONT if cmd == WILL else None
+                    if cmd == WILL and optie in (ECHO_OPT, SGA_OPT):
+                        antwoord = DO
+                    else:
+                        antwoord = WONT if cmd == DO else DONT if cmd == WILL else None
                     if antwoord is not None:
                         try:
                             self.sock.sendall(bytes([IAC, antwoord, optie]))
@@ -86,7 +94,9 @@ class _Telnet:
                 continue
             tekst.append(b)
             i += 1
-        self.buf += tekst.decode("ascii", errors="replace")
+        nieuw = tekst.decode("ascii", errors="replace")
+        self.buf += nieuw
+        self.alles += nieuw
 
     def wacht_op(self, test, timeout: float) -> bool:
         """Wacht tot test(self.buf) waar is. False bij timeout of gesloten verbinding."""
@@ -98,6 +108,10 @@ class _Telnet:
                 return test(self.buf)
             self._lees()
         return test(self.buf)
+
+    def ontvangen(self) -> str:
+        """Laatst ontvangen tekst, ingekort, voor in foutmeldingen."""
+        return repr(self.alles[-200:]) if self.alles else "(niets ontvangen)"
 
     def stuur(self, tekst: str):
         self.buf = ""
@@ -133,10 +147,23 @@ def reset_comserver(ip: str, wachtwoord: str = "", poort: int = SETUP_POORT,
         except OSError as e:
             return {"ok": False, "fout": f"Verbinden mislukt: {e}", "log": regels}
 
-        menu = lambda b: "(q=quit)" in b
+        menu = lambda b: "q=quit" in b.lower()
 
-        # Eventueel telnet-wachtwoord
-        tn.wacht_op(lambda b: menu(b) or "password" in b.lower(), timeout)
+        # Wachten op het hoofdmenu (of een wachtwoordvraag). Toont de Com-Server
+        # niets, dan sturen we af en toe ENTER: sommige menu's verschijnen pas
+        # na een toetsaanslag. Zonder menu sturen we nooit iets anders.
+        einde = time.time() + timeout
+        volgende_enter = time.time() + 2.0
+        while time.time() < einde:
+            if tn.wacht_op(lambda b: menu(b) or "password" in b.lower(), 0.5) or tn.gesloten:
+                break
+            if time.time() >= volgende_enter:
+                log("Nog geen menu ontvangen -> ENTER gestuurd")
+                try:
+                    tn.sock.sendall(b"\r\n")
+                except OSError:
+                    break
+                volgende_enter += 2.5
         if "password" in tn.buf.lower() and not menu(tn.buf):
             if not wachtwoord:
                 return {"ok": False, "fout": "Com-Server vraagt een telnet-wachtwoord (niet ingesteld)", "log": regels}
@@ -144,17 +171,19 @@ def reset_comserver(ip: str, wachtwoord: str = "", poort: int = SETUP_POORT,
             tn.stuur(wachtwoord)
             tn.wacht_op(menu, timeout)
         if not menu(tn.buf):
-            return {"ok": False, "fout": "Hoofdmenu niet gezien", "log": regels}
+            fout = f"Hoofdmenu niet gezien — ontvangen: {tn.ontvangen()}"
+            log(fout)
+            return {"ok": False, "fout": fout, "log": regels}
         log("Hoofdmenu gezien -> '2' (SETUP System)")
 
         tn.stuur("2")
-        if not tn.wacht_op(lambda b: "SETUP System" in b and "(q=quit)" in b[b.find("SETUP System"):], timeout):
-            return {"ok": False, "fout": "SETUP System-menu niet gezien", "log": regels}
+        if not tn.wacht_op(lambda b: "SETUP System" in b and "q=quit" in b[b.find("SETUP System"):].lower(), timeout):
+            return {"ok": False, "fout": f"SETUP System-menu niet gezien — ontvangen: {tn.ontvangen()}", "log": regels}
         log("SETUP System-menu gezien -> '7' (Reset)")
 
         tn.stuur("7")
         if not tn.wacht_op(lambda b: "(Y)" in b, timeout):
-            return {"ok": False, "fout": "Bevestigingsvraag voor reset niet gezien", "log": regels}
+            return {"ok": False, "fout": f"Bevestigingsvraag voor reset niet gezien — ontvangen: {tn.ontvangen()}", "log": regels}
         log("Bevestigingsvraag gezien -> 'Y'")
 
         tn.stuur("Y")
