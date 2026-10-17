@@ -8,6 +8,10 @@ manueel via PuTTY/WuTility: hoofdmenu "2" (SETUP System) -> "7" (Reset)
 Gebruikt een kleine eigen telnet-client op een gewone socket, want de
 standaard 'telnetlib' bestaat niet meer vanaf Python 3.13.
 
+Het configuratiemenu van de W&T Com-Server Highspeed (58631/58034/...) zit op
+TCP-poort 1111 (zie handboek: "telnet <ip> 1111"). Poort 23 is de seriële
+telnet-server-poort en niet het menu.
+
 Let op: enkel bedoeld voor de logging-pc (zie COMSERVER_RESET_PC in app.py).
 """
 
@@ -20,6 +24,8 @@ from datetime import datetime
 from pathlib import Path
 
 IAC, DONT, DO, WONT, WILL, SB, SE = 255, 254, 253, 252, 251, 250, 240
+
+SETUP_POORT = 1111
 
 _slot = threading.Lock()   # nooit twee resets tegelijk
 
@@ -104,7 +110,7 @@ class _Telnet:
             pass
 
 
-def reset_comserver(ip: str, wachtwoord: str = "", poort: int = 23,
+def reset_comserver(ip: str, wachtwoord: str = "", poort: int = SETUP_POORT,
                     stap_log=None, timeout: float = 10.0) -> dict:
     """Reset de Com-Server op 'ip'. Geeft {"ok": bool, "fout": str|None, "log": [..]}."""
     regels: list[str] = []

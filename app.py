@@ -1153,7 +1153,8 @@ DEFAULT_COMSERVERS = [
 #   "comservers": [{"naam": "...", "ip": "192.168.10.10", "wachtwoord": "",
 #                   "bestanden": ["RO1 465", "RO2 465"],   # naam uit ro_logs/hr_logs,
 #                                                          # "ccs_log" of een pad
-#                   "stale_minuten": 15, "cooldown_minuten": 60}]
+#                   "stale_minuten": 15, "cooldown_minuten": 60,
+#                   "poort": 1111}]   # setup-poort (standaard 1111)
 COMSERVER_MAX_PER_DAG = 3
 
 
@@ -1188,7 +1189,7 @@ def _comserver_leeftijd_min(cfg: dict, cs: dict, met_naam: bool = False):
 
 
 def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig", vanaf: str = "") -> dict:
-    from comserver import reset_comserver, schrijf_log
+    from comserver import reset_comserver, schrijf_log, SETUP_POORT
     hostname = socket.gethostname()
     naam = cs.get("naam", cs["ip"])
     if hostname.upper() != COMSERVER_RESET_PC:
@@ -1198,7 +1199,8 @@ def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig", vanaf: str = "
         return {"ok": False, "fout": fout, "log": [], "pc": hostname}
     schrijf_log(f"{cs['ip']}: '{naam}' — {bron}e reset gestart (pc {hostname}"
                 + (f", aangevraagd vanaf {vanaf}" if vanaf else "") + ")")
-    res = reset_comserver(cs["ip"], wachtwoord=cs.get("wachtwoord", ""))
+    res = reset_comserver(cs["ip"], wachtwoord=cs.get("wachtwoord", ""),
+                          poort=int(cs.get("poort", SETUP_POORT)))
     schrijf_log(f"{cs['ip']}: resultaat: " + ("OK" if res["ok"] else f"MISLUKT — {res['fout']}"))
     (log.warning if res["ok"] else log.error)(
         f"Com-Server '{naam}' ({cs['ip']}) reset: "
@@ -1262,29 +1264,34 @@ def _comserver_controle_ronde(staat: dict):
         if oudste is None:
             continue                      # share/bestanden niet bereikbaar: niets doen
         leeftijd, oudste_naam = oudste
-        st = staat.setdefault(ip, {"resets": [], "gemeld": False})
+        st = staat.setdefault(ip, {})
+        st.setdefault("ok_resets", [])      # enkel GESLAAGDE resets tellen voor het dagmaximum
+        st.setdefault("laatste_poging", 0)  # elke poging (ook mislukt) start de cooldown
+        st.setdefault("gemeld", False)
         if leeftijd <= float(cs.get("stale_minuten", 15)):
             st["gemeld"] = False          # data loopt weer: nieuwe episode mogelijk
             continue
-        st["resets"] = [t for t in st["resets"] if nu - t < 86400]
+        st["ok_resets"] = [t for t in st["ok_resets"] if nu - t < 86400]
         cooldown = float(cs.get("cooldown_minuten", 60)) * 60
-        if st["resets"] and nu - st["resets"][-1] < cooldown:
+        if nu - st["laatste_poging"] < cooldown:
             continue
-        if len(st["resets"]) >= COMSERVER_MAX_PER_DAG:
+        if len(st["ok_resets"]) >= COMSERVER_MAX_PER_DAG:
             if not st["gemeld"]:
                 st["gemeld"] = True
                 from comserver import schrijf_log
                 schrijf_log(f"{ip}: '{naam}' — '{oudste_naam}' al {leeftijd:.0f} min niet bijgewerkt; "
-                            f"maximum van {COMSERVER_MAX_PER_DAG} automatische resets per 24u bereikt — manueel nakijken")
+                            f"maximum van {COMSERVER_MAX_PER_DAG} geslaagde automatische resets per 24u bereikt — manueel nakijken")
                 stuur_matrix_bericht(f"\u26a0\ufe0f {naam} ({ip}): data nog steeds niet bijgewerkt "
                                      f"({leeftijd:.0f} min) na {COMSERVER_MAX_PER_DAG} automatische resets — manueel nakijken.")
             continue
-        st["resets"].append(nu)           # eerst registreren: nooit lussen
+        st["laatste_poging"] = nu         # eerst registreren: nooit lussen
         from comserver import schrijf_log
         schrijf_log(f"{ip}: '{naam}' — '{oudste_naam}' {leeftijd:.0f} min niet bijgewerkt "
                     f"(drempel {float(cs.get('stale_minuten', 15)):.0f} min) -> automatische reset "
-                    f"({len(st['resets'])}/{COMSERVER_MAX_PER_DAG} vandaag)")
+                    f"({len(st['ok_resets']) + 1}/{COMSERVER_MAX_PER_DAG} vandaag)")
         res = _comserver_reset_uitvoeren(cs, "automatisch")
+        if res["ok"]:
+            st["ok_resets"].append(nu)
         stuur_matrix_bericht(
             f"\U0001f501 {naam} ({ip}): data {leeftijd:.0f} min niet bijgewerkt -> automatische reset "
             + ("uitgevoerd." if res["ok"] else f"MISLUKT: {res['fout']}"))
