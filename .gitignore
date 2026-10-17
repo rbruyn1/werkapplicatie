@@ -38,3 +38,6 @@ melkkoppelingen_log.txt
 
 # Oude crash-log dump, geen nuttige broncode
 Nieuw - Tekstdocument.txt
+comserver_verzoeken/
+comserver_staat.json
+ccs_watch_staat.json

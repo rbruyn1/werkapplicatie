@@ -1209,6 +1209,102 @@ def _comserver_reset_uitvoeren(cs: dict, bron: str = "handmatig", vanaf: str = "
     return res
 
 
+COMSERVER_VERZOEK_MAP = Path(__file__).parent / "comserver_verzoeken"
+COMSERVER_VERZOEK_MAX_LEEFTIJD = 180   # s; oudere verzoeken worden niet meer uitgevoerd
+
+
+@app.route("/api/comserver/reset-status/<vid>", methods=["GET"])
+def api_comserver_reset_status(vid):
+    if not re.fullmatch(r"\d+_[0-9a-f]{6}", vid):
+        return jsonify({"ok": False, "fout": "Ongeldig id"}), 400
+    pad = COMSERVER_VERZOEK_MAP / f"resultaat_{vid}.json"
+    try:
+        data = json.loads(pad.read_text(encoding="utf-8"))
+        data["bezig"] = False
+        return jsonify(data)
+    except Exception:
+        return jsonify({"ok": None, "bezig": True})   # nog niet klaar (of net geschreven)
+
+
+def _comserver_verzoeken_ronde(verwerkt: set):
+    """Draait op de logging-pc: pikt verzoekbestanden van andere pc's op, voert
+    de reset uit, schrijft een resultaatbestand en verwijdert het verzoek."""
+    from comserver import schrijf_log
+    if not COMSERVER_VERZOEK_MAP.exists():
+        return
+    nu = _time.time()
+    for pad in sorted(COMSERVER_VERZOEK_MAP.glob("verzoek_*.json")):
+        vid = pad.stem[len("verzoek_"):]
+        if vid in verwerkt:               # al uitgevoerd, verwijderen lukte toen niet: opnieuw proberen
+            try:
+                pad.unlink()
+            except OSError:
+                pass
+            continue
+        try:
+            data = json.loads(pad.read_text(encoding="utf-8"))
+        except Exception:
+            # mogelijk nog niet volledig geschreven; na 60 s opgeven
+            try:
+                if nu - pad.stat().st_mtime > 60:
+                    verwerkt.add(vid)
+                    pad.unlink()
+                    schrijf_log(f"verzoekbestand {vid}: onleesbaar, verwijderd")
+            except OSError:
+                pass
+            continue
+        verwerkt.add(vid)                 # eerst registreren: nooit twee keer uitvoeren
+        ip, pc = str(data.get("ip", "")), str(data.get("pc", "?"))
+        leeftijd = nu - float(data.get("tijd", nu))
+        cs = next((c for c in _comservers() if c["ip"] == ip), None)
+        if not cs:
+            res = {"ok": False, "fout": f"Onbekende Com-Server '{ip}'", "log": []}
+            schrijf_log(f"verzoekbestand {vid}: {res['fout']}")
+        elif leeftijd > COMSERVER_VERZOEK_MAX_LEEFTIJD:
+            res = {"ok": False, "log": [],
+                   "fout": f"Verzoek te oud ({leeftijd:.0f} s) — niet uitgevoerd"}
+            schrijf_log(f"{ip}: verzoekbestand {vid} van {pc}: {res['fout']}")
+        else:
+            schrijf_log(f"{ip}: verzoekbestand {vid} opgepikt (aangevraagd op {pc})")
+            res = _comserver_reset_uitvoeren(cs, "handmatig", vanaf=pc)
+            res["naam"] = cs.get("naam", ip)
+        try:
+            _schrijf_json_atomisch(COMSERVER_VERZOEK_MAP / f"resultaat_{vid}.json", res)
+        except Exception as e:
+            log.error(f"Com-Server resultaatbestand schrijven mislukt: {e}")
+        try:
+            pad.unlink()
+        except OSError as e:
+            schrijf_log(f"{ip}: verzoekbestand {vid} kon niet verwijderd worden ({e}) — wordt genegeerd")
+    # opruimen: resultaten die niemand meer ophaalt
+    for pad in COMSERVER_VERZOEK_MAP.glob("resultaat_*.json"):
+        try:
+            if nu - pad.stat().st_mtime > 600:
+                pad.unlink()
+        except OSError:
+            pass
+    if len(verwerkt) > 500:
+        verwerkt.clear()
+
+
+def start_comserver_verzoeken(interval_seconden: int = 3):
+    """Enkel op de logging-pc: verwerkt elke paar seconden de verzoekbestanden."""
+    if socket.gethostname().upper() != COMSERVER_RESET_PC:
+        return
+    verwerkt: set = set()
+
+    def _loop():
+        while True:
+            try:
+                _comserver_verzoeken_ronde(verwerkt)
+            except Exception as e:
+                log.error(f"Com-Server verzoeken-lus fout: {e}")
+            _time.sleep(interval_seconden)
+
+    threading.Thread(target=_loop, daemon=True, name="comserver-verzoeken").start()
+    log.info("Com-Server verzoeken-lus gestart (map comserver_verzoeken)")
+
+
 @app.route("/api/comserver", methods=["GET"])
 def api_comserver_lijst():
     cfg = load_config()
@@ -1231,31 +1327,24 @@ def api_comserver_reset():
     cs = next((c for c in _comservers() if c["ip"] == ip), None)
     if not cs:
         return jsonify({"ok": False, "fout": f"Onbekende Com-Server '{ip}'"}), 400
-    if socket.gethostname().upper() != COMSERVER_RESET_PC and not request.headers.get("X-Comserver-Forward"):
-        # Niet de logging-pc: de reset moet daar uitgevoerd worden -> doorsturen,
-        # zodat de knop in het dashboard op elke pc werkt.
+    if socket.gethostname().upper() != COMSERVER_RESET_PC:
+        # Niet de logging-pc. Pc's mogen onderling niet rechtstreeks communiceren,
+        # dus: een klein verzoekbestand op de gedeelde map zetten. De app op de
+        # logging-pc pikt het op, voert de reset uit, schrijft een resultaatbestand
+        # en verwijdert het verzoek (zie _comserver_verzoeken_ronde).
         from comserver import schrijf_log
         hostnaam = socket.gethostname()
-        schrijf_log(f"{ip}: reset aangevraagd op {hostnaam} (vanaf {request.remote_addr}) -> doorsturen naar {COMSERVER_RESET_PC}")
         try:
-            import requests as _rq
-            poort = load_config().get("server_port", 5000)
-            sessie = _rq.Session()
-            sessie.trust_env = False    # interne pc: nooit via een (Windows-)proxy
-            r = sessie.post(f"http://{COMSERVER_RESET_PC}:{poort}/api/comserver/reset",
-                            json={"ip": ip}, headers={"X-Comserver-Forward": "1"},
-                            timeout=(5, 45))     # 5 s om te verbinden, 45 s voor de reset zelf
-            try:
-                return jsonify(r.json()), r.status_code
-            except ValueError:
-                fout = (f"Onverwacht antwoord van {COMSERVER_RESET_PC} (HTTP {r.status_code}) "
-                        f"— is de app daar bijgewerkt?")
-                schrijf_log(f"{ip}: doorsturen mislukt: {fout}")
-                return jsonify({"ok": False, "log": [], "fout": fout}), 502
+            COMSERVER_VERZOEK_MAP.mkdir(exist_ok=True)
+            vid = f"{int(_time.time() * 1000)}_{os.urandom(3).hex()}"
+            (COMSERVER_VERZOEK_MAP / f"verzoek_{vid}.json").write_text(
+                json.dumps({"id": vid, "ip": ip, "pc": hostnaam, "tijd": _time.time()}), encoding="utf-8")
         except Exception as e:
-            fout = f"{COMSERVER_RESET_PC}:{load_config().get('server_port', 5000)} niet bereikbaar vanaf {hostnaam}: {e}"
-            schrijf_log(f"{ip}: doorsturen mislukt: {fout}")
-            return jsonify({"ok": False, "log": [], "fout": fout}), 502
+            fout = f"Verzoekbestand schrijven mislukt: {e}"
+            schrijf_log(f"{ip}: {fout}")
+            return jsonify({"ok": False, "log": [], "fout": fout}), 500
+        schrijf_log(f"{ip}: reset aangevraagd op {hostnaam} -> verzoekbestand {vid} (wacht op {COMSERVER_RESET_PC})")
+        return jsonify({"ok": None, "bezig": True, "id": vid, "naam": cs.get("naam", ip)}), 202
     res = _comserver_reset_uitvoeren(cs, "handmatig", vanaf=request.remote_addr or "")
     res["naam"] = cs.get("naam", ip)
     return jsonify(res), (200 if res["ok"] else 500)
@@ -3725,6 +3814,7 @@ if __name__ == "__main__":
         pass  # geen vorige instantie actief, gewoon doorgaan
 
     start_background_scraper()
+    start_comserver_verzoeken()
     log.info(f"Dashboard beschikbaar op http://0.0.0.0:{port}")
     log.info(f"Thuisdialyse beschikbaar op http://0.0.0.0:{port}/thuisdialyse")
     log.info(f"RO Staalnames beschikbaar op http://0.0.0.0:{port}/ro-staalname")

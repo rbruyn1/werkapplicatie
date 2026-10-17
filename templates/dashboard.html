@@ -771,6 +771,26 @@
     }
   }
 
+  function comserverToon(cs, d, body) {
+    body.innerHTML = `<div class="${d.ok ? 'cs-ok' : 'cs-fout'}">${d.ok ? '✓ Reset verstuurd naar ' + csEsc(cs.naam) : '✗ ' + csEsc(d.fout || 'Mislukt')}</div>`
+      + (d.log && d.log.length ? `<pre class="cs-log">${csEsc(d.log.join('\n'))}</pre>` : '');
+  }
+
+  // Op een andere pc dan de logging-pc wordt een verzoekbestand op de gedeelde map
+  // gezet; de app op UZLDT11866 pikt het op en voert de reset uit.
+  async function comserverWacht(cs, id, body) {
+    const start = Date.now();
+    while (Date.now() - start < 130000) {
+      const sec = Math.round((Date.now() - start) / 1000);
+      body.innerHTML = `<div class="cs-bezig">Verzoek staat klaar — wachten tot de logging-pc (UZLDT11866) de reset uitvoert… ${sec} s</div>`;
+      await new Promise(r => setTimeout(r, 2000));
+      let d;
+      try { d = await (await fetch('/api/comserver/reset-status/' + id)).json(); } catch (e) { continue; }
+      if (!d.bezig) { comserverToon(cs, d, body); return; }
+    }
+    body.innerHTML = '<div class="cs-fout">✗ Geen antwoord van de logging-pc — draait de app op UZLDT11866? Het verzoek verloopt na 3 minuten en wordt dan niet meer uitgevoerd.</div>';
+  }
+
   async function comserverReset(cs, body) {
     if (!confirm(`${cs.naam} (${cs.ip}) resetten?\n\nAlle seriële poorten op deze Com-Server worden even onderbroken.`)) return;
     body.innerHTML = '<div class="cs-bezig">Reset bezig… (kan tot ±30 s duren)</div>';
@@ -779,8 +799,8 @@
         method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ip: cs.ip})
       });
       const d = await resp.json();
-      body.innerHTML = `<div class="${d.ok ? 'cs-ok' : 'cs-fout'}">${d.ok ? '✓ Reset verstuurd naar ' + csEsc(cs.naam) : '✗ ' + csEsc(d.fout || 'Mislukt')}</div>`
-        + (d.log && d.log.length ? `<pre class="cs-log">${csEsc(d.log.join('\n'))}</pre>` : '');
+      if (d.bezig && d.id) { await comserverWacht(cs, d.id, body); return; }
+      comserverToon(cs, d, body);
     } catch (e) {
       body.innerHTML = `<div class="cs-fout">✗ ${csEsc(String(e))}</div>`;
     }
