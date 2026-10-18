@@ -79,6 +79,13 @@ TAKEN = [
 ]
 
 _staat_lock = threading.Lock()
+_bezig = threading.Event()   # staat aan zolang een poll-ronde loopt (sheets lezen + WO's aanmaken)
+
+
+def is_bezig() -> bool:
+    """True zolang een poll-ronde loopt. app.py wacht hierop vóór een geplande herstart,
+    zodat er geen half WO in PeopleSoft achterblijft."""
+    return _bezig.is_set()
 
 
 # ── Config / staat ───────────────────────────────────────────────────────────
@@ -465,6 +472,15 @@ async def _verwerk_batch(taken: list[dict], cfg: dict, stap_log=None) -> None:
 
 # ── Eén poll-ronde ───────────────────────────────────────────────────────────
 def poll_en_verwerk(on_fout=None) -> dict:
+    """Eén ronde (zie _poll_en_verwerk), met 'bezig'-vlag voor een veilige herstart."""
+    _bezig.set()
+    try:
+        return _poll_en_verwerk(on_fout)
+    finally:
+        _bezig.clear()
+
+
+def _poll_en_verwerk(on_fout=None) -> dict:
     """
     Eén ronde: alle sheets nakijken en voor nieuwe rijen een WO aanmaken.
     on_fout(naam, rij, fout): callback voor een alert in de app.

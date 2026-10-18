@@ -587,15 +587,108 @@ def api_update_check():
     })
 
 
-def _herstart_zelf():
+# ── Master-herstart na een update op een andere pc ───────────────────────────
+# Alle pc's draaien hun eigen proces op dezelfde gedeelde map, maar enkel de
+# scraper-master (scraper.lock) draait de scraper en de achtergrond-loops. Na een
+# update via de knop herstart alleen de pc van de gebruiker; de master bleef op de
+# oude code draaien. Daarom: een pc die zich herstart na een update zet het vlagbestand
+# herstart_master.flag in de gedeelde map. De master ziet dat, wist het bestand,
+# wacht tot er geen PeopleSoft-taak meer loopt en herstart dan zichzelf.
+HERSTART_FLAG       = Path(__file__).parent / "herstart_master.flag"
+HERSTART_POLL_SEC   = 5      # hoe vaak de master naar het vlagbestand kijkt
+HERSTART_MAX_WACHT  = 900    # max. seconden wachten op lopende taken (daarna toch herstarten)
+
+
+def _vraag_master_herstart():
+    """Zet het vlagbestand, maar enkel als er een master is en dat een ándere pc is
+    (is dit pc zelf de master, dan herstart hij toch al)."""
+    try:
+        master = ""
+        if LOCK_PATH.exists():
+            master = json.loads(LOCK_PATH.read_text()).get("host", "")
+        hostname = socket.gethostname()
+        if master and master != hostname:
+            HERSTART_FLAG.write_text(json.dumps({"van": hostname,
+                                                  "tijd": __import__("time").time()}))
+            log.info(f"Herstart-vlag gezet voor scraper-master {master}")
+    except Exception as e:
+        log.warning(f"Herstart-vlag voor de master kon niet gezet worden: {e}")
+
+
+def _er_lopen_taken() -> bool:
+    """True als er een PeopleSoft-/achtergrondtaak bezig is die een herstart zou onderbreken:
+    een RO-sheets-ronde, of een via de webinterface gestarte job (status 'bezig')."""
+    try:
+        from wo_ro_sheets import is_bezig
+        if is_bezig():
+            return True
+    except Exception:
+        pass
+
+    def _bezig(job):
+        return isinstance(job, dict) and (job.get("bezig") is True or job.get("status") == "bezig")
+
+    try:
+        if any(_bezig(j) for j in list(app.config.values())):
+            return True
+        for jobs in (_sr_jobs, _tw_jobs):
+            if any(_bezig(j) for j in list(jobs.values())):
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def _master_vlag_watcher(stop_event):
+    """Enkel op de master: kijkt of een andere pc een herstart gevraagd heeft."""
+    import time
+    # Een vlag van vóór onze start is achterhaald: we draaien al de nieuwste code.
+    try:
+        HERSTART_FLAG.unlink()
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        log.warning(f"Oude herstart-vlag kon niet gewist worden: {e}")
+
+    while not stop_event.is_set():
+        if HERSTART_FLAG.exists():
+            try:
+                van = json.loads(HERSTART_FLAG.read_text()).get("van", "?")
+            except Exception:
+                van = "?"
+            try:
+                HERSTART_FLAG.unlink()
+            except Exception as e:
+                # Niet wisbaar = anders eindeloos herstarten. Dan liever niets doen.
+                log.error(f"Herstart-vlag kon niet gewist worden ({e}) — master herstart NIET")
+                stop_event.wait(60)
+                continue
+            log.info(f"Herstart-vlag van {van} — master herstart zodra er geen taken meer lopen")
+            stop_event.set()   # geen nieuwe RO-sheets-rondes meer starten
+            gewacht = 0
+            while _er_lopen_taken() and gewacht < HERSTART_MAX_WACHT:
+                time.sleep(HERSTART_POLL_SEC)
+                gewacht += HERSTART_POLL_SEC
+            if gewacht >= HERSTART_MAX_WACHT:
+                log.warning("Taken liepen nog na 15 minuten — master herstart toch")
+            _herstart_zelf(lock_behouden=True)
+            return
+        stop_event.wait(HERSTART_POLL_SEC)
+
+
+def _herstart_zelf(lock_behouden=False):
     """Vervangt het huidige Python-proces door een verse start met dezelfde
     argumenten (dus 'python start.py' blijft 'python start.py', 'python
     app.py' blijft 'python app.py') - zo laadt de nieuwe code effectief,
-    zonder dat iemand het venster zelf moet sluiten en heropenen."""
-    try:
-        verwijder_lock()
-    except Exception:
-        pass
+    zonder dat iemand het venster zelf moet sluiten en heropenen.
+    lock_behouden: de master laat zijn scraper.lock staan, zodat geen andere pc in
+    de tussentijd master kan worden."""
+    if not lock_behouden:
+        _vraag_master_herstart()   # vóór verwijder_lock(): daarna is de master niet meer te zien
+        try:
+            verwijder_lock()
+        except Exception:
+            pass
     if os.environ.get("WO_SUPERVISED"):
         # De supervisor (of start.py) start meteen een verse instantie.
         log.info("Herstart nu na update (exitcode 75)...")
@@ -698,6 +791,8 @@ def start_background_scraper():
         login_status = {"ok": True, "bericht": bericht}
         return
     threading.Thread(target=update_lock_ping, daemon=True, name="lock-ping").start()
+    threading.Thread(target=_master_vlag_watcher, args=(stop_event,), daemon=True,
+                     name="master-herstart-vlag").start()
     try:
         from onedrive_sync import start_onedrive_sync
         start_onedrive_sync(cfg)

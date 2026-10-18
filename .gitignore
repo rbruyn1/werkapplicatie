@@ -13,6 +13,7 @@ uploads/
 tessdata/
 *.log
 *.lock
+herstart_master.flag
 data.json
 ccs_log_data*.json
 ccs_skip_bestelling.json

@@ -7,6 +7,19 @@ historiek).
 
 ## 2026-10-16
 
+### Scraper-master herstart mee na een update op een andere pc
+- Na een update via de knop herstart de pc van de gebruiker, maar de scraper-master
+  bleef op de oude code draaien. Nu zet die pc het vlagbestand `herstart_master.flag`
+  in de gedeelde map (enkel als de master een andere pc is). De master kijkt elke 5 s,
+  wist het bestand en herstart zichzelf (zelfde mechanisme als na een update).
+- De master wacht met herstarten tot er geen PeopleSoft-taak meer loopt (RO-sheets-ronde
+  of een job met status "bezig"), maximaal 15 minuten, en start intussen geen nieuwe
+  RO-sheets-ronde. Zijn `scraper.lock` blijft staan, zodat geen andere pc master wordt.
+- Een vlagbestand van vóór het opstarten van de master wordt bij het opstarten gewist.
+  Kan de vlag niet gewist worden, dan herstart de master niet (anders eindeloos herstarten).
+- `herstart_master.flag` staat in `.gitignore`.
+- Werkt enkel voor de update-knop (`/api/update-nu`), niet voor een handmatige `git pull`.
+
 ### RO-formulieren: taken op het werkorder
 - Het automatisch aangemaakte WO krijgt nu taaklijnen met de tekstwaarden uit het
   formulier: 0000001962 aantal zakken zout, 0000001963 ingangsdruk, 0000001964
