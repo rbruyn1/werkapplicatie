@@ -7,6 +7,14 @@ historiek).
 
 ## 2026-10-19
 
+### CCS-containerbestelling — meerdere regels in dezelfde seconde
+- `CcsLogWatcher` bewaart naast het tijdstempel van de laatst verwerkte regel nu ook
+  hoeveel regels met **exact** dat tijdstempel al verwerkt zijn (`ccs_watch_staat.json`:
+  `{"CCS 465": {"ts": ..., "n": ...}}`). Twee containers die in dezelfde seconde
+  wisselen, worden zo allebei precies één keer verwerkt, ook als ze in
+  verschillende pollrondes binnenkomen. Het oude formaat (enkel een tijdstempel)
+  wordt automatisch omgezet zonder iets opnieuw af te spelen.
+
 ### Com-Server reset — master-herstart wacht op een lopende reset
 - `_er_lopen_taken()` (herstart van de scraper-master na een update op een andere
   pc) kent nu ook een lopende Com-Server reset (`comserver.is_bezig()`): de master

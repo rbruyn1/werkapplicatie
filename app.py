@@ -2957,26 +2957,34 @@ class CcsLogWatcher(LogBestandWatcher):
 
     def __init__(self, naam: str, pad: Path):
         super().__init__(naam, pad)
-        self._laatste = self._laad_laatste()
-        if self._laatste is None:
+        staat = self._laad_laatste()
+        if staat is None:
             # Eerste keer: geen historiek opnieuw afspelen, vanaf nu verder.
             tijden = [ts for ts, _ in self._lees_regels()]
             self._laatste = max(tijden) if tijden else datetime.now()
+            self._n = sum(1 for t in tijden if t == self._laatste)
             self._bewaar()
         else:
+            self._laatste, self._n = staat
             self.verwerk_nieuwe()   # inhalen wat gemist werd tijdens stilstand
 
     def _laad_laatste(self):
+        """Geeft (tijdstempel, aantal al verwerkte regels met EXACT dat tijdstempel) of None."""
         try:
-            data = _lees_json_veilig(self.STAAT_PAD, {})
-            return datetime.fromisoformat(data[self.naam])
+            data = _lees_json_veilig(self.STAAT_PAD, {})[self.naam]
+            if isinstance(data, dict):
+                return datetime.fromisoformat(data["ts"]), int(data.get("n", 1))
+            # Oud formaat (enkel een tijdstempel): alles wat er nu met dat
+            # tijdstempel staat, geldt als verwerkt.
+            ts = datetime.fromisoformat(data)
+            return ts, sum(1 for t, _ in self._lees_regels() if t == ts)
         except Exception:
             return None
 
     def _bewaar(self):
         try:
             data = _lees_json_veilig(self.STAAT_PAD, {})
-            data[self.naam] = self._laatste.isoformat()
+            data[self.naam] = {"ts": self._laatste.isoformat(), "n": self._n}
             _schrijf_json_atomisch(self.STAAT_PAD, data)
         except Exception as e:
             log.error(f"CCS watcher staat bewaren mislukt: {e}")
@@ -3005,13 +3013,26 @@ class CcsLogWatcher(LogBestandWatcher):
     def verwerk_nieuwe(self):
         with self._lock:
             try:
-                nieuw = sorted(r for r in self._lees_regels() if r[0] > self._laatste)
+                nieuw, zelfde = [], 0
+                for ts, regel in self._lees_regels():
+                    if ts > self._laatste:
+                        nieuw.append((ts, regel))
+                    elif ts == self._laatste:
+                        # Meerdere regels in dezelfde seconde: enkel de nog niet
+                        # verwerkte (bestandsvolgorde; het eerste _n zijn al gedaan).
+                        zelfde += 1
+                        if zelfde > self._n:
+                            nieuw.append((ts, regel))
+                nieuw.sort(key=lambda r: r[0])    # stabiel: bestandsvolgorde blijft behouden
             except Exception as e:
                 log.error(f"Fout bij lezen logbestand {self.naam}: {e}")
                 return
             for ts, regel in nieuw:
                 # Eerst bewaren: een regel mag nooit twee keer verwerkt worden.
-                self._laatste = ts
+                if ts == self._laatste:
+                    self._n += 1
+                else:
+                    self._laatste, self._n = ts, 1
                 self._bewaar()
                 if datetime.now() - ts > _timedelta(hours=self.CATCHUP_UREN):
                     log.warning(f"CCS-regel te oud om in te halen, overgeslagen: [{self.naam}] {regel}")
