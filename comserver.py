@@ -32,6 +32,11 @@ _slot = threading.Lock()   # nooit twee resets tegelijk
 LOG_PAD = Path(__file__).parent / "logs" / "comserver.log"
 
 
+def is_bezig() -> bool:
+    """True zolang er een Com-Server reset loopt (bv. om een herstart van de app uit te stellen)."""
+    return _slot.locked()
+
+
 def schrijf_log(msg: str) -> None:
     """Schrijft een regel naar logs/comserver.log (zelfde formaat als de andere logs)."""
     try:

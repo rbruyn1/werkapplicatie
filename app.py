@@ -617,10 +617,18 @@ def _vraag_master_herstart():
 
 def _er_lopen_taken() -> bool:
     """True als er een PeopleSoft-/achtergrondtaak bezig is die een herstart zou onderbreken:
-    een RO-sheets-ronde, of een via de webinterface gestarte job (status 'bezig')."""
+    een RO-sheets-ronde, een Com-Server reset, of een via de webinterface gestarte job
+    (status 'bezig')."""
     try:
         from wo_ro_sheets import is_bezig
         if is_bezig():
+            return True
+    except Exception:
+        pass
+
+    try:
+        from comserver import is_bezig as comserver_bezig   # lopende Com-Server reset
+        if comserver_bezig():
             return True
     except Exception:
         pass

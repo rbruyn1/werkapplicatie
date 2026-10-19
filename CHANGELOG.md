@@ -5,7 +5,56 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-10-19
+
+### Com-Server reset — master-herstart wacht op een lopende reset
+- `_er_lopen_taken()` (herstart van de scraper-master na een update op een andere
+  pc) kent nu ook een lopende Com-Server reset (`comserver.is_bezig()`): de master
+  wacht met herstarten tot de reset klaar is, i.p.v. de telnet-sessie te onderbreken.
+
+## 2026-10-17
+
+### Com-Server reset — werkt met de echte toestellen
+- Het setup-menu van de W&T Com-Server Highspeed zit op **TCP-poort 1111**, niet op
+  23 (`poort` per Com-Server instelbaar in `config.json`). Het menu verschijnt pas
+  nadat de client de telnet-opties ECHO en SGA aanvaardt (zoals PuTTY); de eigen
+  telnet-client in `comserver.py` doet dat (`telnetlib` bestaat niet meer vanaf
+  Python 3.13). Blijft het menu toch weg, dan wordt af en toe ENTER gestuurd en
+  staat in `logs/comserver.log` wat de Com-Server stuurde.
+- Mislukte automatische pogingen tellen niet meer mee voor het maximum van 3
+  resets per 24 u (enkel geslaagde). Na elke poging geldt wel de cooldown.
+- **Reset vanaf een andere pc dan de logging-pc**: pc's mogen onderling niet
+  rechtstreeks communiceren, dus de dashboardknop zet een verzoekbestand in
+  `comserver_verzoeken\` op de gedeelde map. De app op `UZLDT11866` kijkt daar elke
+  3 s, voert de reset uit, schrijft `resultaat_<id>.json` en verwijdert het
+  verzoek; het dashboard wacht op dat resultaat. Het IP moet in de lijst met
+  Com-Servers staan, verzoeken ouder dan 3 minuten worden niet meer uitgevoerd en
+  een verzoek dat niet verwijderd kan worden, wordt maar één keer uitgevoerd.
+  De map staat in `.gitignore`.
+
 ## 2026-10-16
+
+### Com-Server reset (W&T, via telnet)
+- Nieuw `comserver.py`: reset via telnet zoals manueel via WuTility/PuTTY
+  (hoofdmenu `2` SETUP System → `7` Reset → `Y`). Enkel op de logging-pc
+  `UZLDT11866` (`COMSERVER_RESET_PC`) en enkel naar de IP's uit `config.json` →
+  `comservers` (standaard 192.168.10.10 en 192.168.10.11, zonder telnet-wachtwoord).
+- Dashboard: knop **🔌 Com-Server reset** in de statusbalk (na de type-filters):
+  Com-Server kiezen, bevestigen, resultaat en stappen zien. API:
+  `GET /api/comserver`, `POST /api/comserver/reset`,
+  `GET /api/comserver/reset-status/<id>`.
+- Automatische bewaking (enkel op `UZLDT11866`, opt-in): per Com-Server staan in
+  `comservers[].bestanden` de logs die eraan hangen (namen uit `ro_logs`/`hr_logs`,
+  `ccs_log` of een pad). Is **één** van die bestanden langer dan `stale_minuten`
+  (standaard 15) niet bijgewerkt, dan volgt een reset (één stilgevallen poort
+  volstaat). Cooldown `cooldown_minuten` (standaard 60) en maximaal 3 resets per
+  24 u; elke reset of mislukking gaat naar Matrix. Staat in `comserver_staat.json`.
+  Zonder `bestanden` is alleen handmatig resetten actief.
+- Eigen log `logs/comserver.log` (op de Logs-pagina voor iedereen zichtbaar):
+  detectie, telnet-stappen, resultaat en wie de reset aanvroeg.
+- Logs-pagina: de RO-formulierenlog is enkel nog zichtbaar voor het Windows-account
+  `rbruyn1` (niet voor `sa_water`). Onbekende Windows-accounts vielen daarvoor
+  terug op `config.json` → `username` en zagen de log dus ook.
 
 ### Scraper-master herstart mee na een update op een andere pc
 - Na een update via de knop herstart de pc van de gebruiker, maar de scraper-master
@@ -59,12 +108,48 @@ historiek).
 - Staat standaard UIT en in `dry_run`: zet in `config.json` onder `ro_sheets`
   `enabled: true`, vul de T-nummers in en zet pas daarna `dry_run` op `false`.
   Zie `config.example.json`. Log: `logs/ro_sheets_wo.log`. Dat log is in de
-  Logs-pagina enkel zichtbaar als de PC-gebruiker `rbruyn1` is (ook `sa_water`
-  op de master-pc); voor anderen ontbreekt het in de lijst en geeft het 404.
+  Logs-pagina enkel zichtbaar als het Windows-account van de pc `rbruyn1` is
+  (dus niet voor `sa_water` op de master-pc); voor anderen ontbreekt het in de
+  lijst en geeft het 404.
 - `vul_werkuren_lijn` controleert het urenveld nu tegen de meegegeven uren i.p.v.
   hard tegen 0.5.
 
+## 2026-10-15
+
+### CCS-containerbestelling — gemiste `enabled`-regels
+- Probleem: de log-watcher op `CCS_error.txt` werkte met een bytepositie en
+  `watchdog`. Wordt het bestand ingekort, of valt `watchdog` op de netwerkshare
+  stil (de share viel o.a. rond 23:00 weg), dan werd een `enabled`-regel (= vat
+  vervangen → ESS-bestelling + WO) stilletjes gemist, en regels tijdens een
+  herstart werden nooit ingehaald.
+- Nu verwerkt `CcsLogWatcher` de regels op **tijdstempel** (bewaard in
+  `ccs_watch_staat.json`), bij elke wijziging én elke 30 s (polling-vangnet).
+  Onvolledig geschreven regels worden pas verwerkt als ze compleet zijn. Gemiste
+  regels na een herstart worden ingehaald tot 24 u terug; oudere worden enkel als
+  WARNING gelogd om late of dubbele bestellingen te vermijden. De eerste keer
+  wordt geen historiek afgespeeld. De regel van vóór de eerste start na deze
+  update wordt dus niet ingehaald.
+
+### Werkuren — naamverificatie
+- `wo_aanmaken.py`: de verwachte naam uit `config.json` stond dubbel verkeerd
+  gecodeerd (`JOSÃƒâ€° RYDANT`), waardoor de controle 10 keer faalde (±75 s extra).
+  `_naam_norm()` herstelt zulke tekst en negeert accenten en hoofdletters.
+  Dezelfde vergelijking staat nog (niet aangepast) in `wo_lage_temperatuur.py` en
+  `wo_ro_staalname.py`.
+
 ## 2026-10-14
+
+### Service rapporten — Vantive-rapporten met onleesbare PDF-tekst
+- Sommige Vantive-service rapporten (Salesforce-export) hebben een font zonder
+  bruikbare tekenmapping: `pdfplumber` gaf enkel `(cid:..)`-rommel, waardoor geen
+  enkel veld werd herkend. `_pdf_tekst()` detecteert dat en valt automatisch terug
+  op OCR (PyMuPDF rendert de pagina, Tesseract leest `nld+eng` met `--psm 6`).
+- Formaatdetectie voor Vantive versoepeld (`Servicerapport` i.p.v. verplicht
+  `Detail Servicerapport`); de regex's tolereren een ontbrekende of vervormde dubbele
+  punt (OCR); `Repair` als waarde bij Type Verzoek werd verward met het `Repair`-label
+  in de interventietabel (nu enkel aan regelbegin gematcht).
+- Nieuwe pakketten `pymupdf` en `pytesseract` (`requirements.txt`, `installeer.ps1`
+  en automatische installatie bij het opstarten). Tesseract zelf: zie hieronder.
 
 ### Service rapporten — OCR-terugval (Tesseract) opstarten
 - Tesseract wordt nu ook gevonden als het niet op PATH staat (standaardmap
