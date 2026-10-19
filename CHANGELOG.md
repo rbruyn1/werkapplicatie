@@ -127,8 +127,7 @@ historiek).
   Onvolledig geschreven regels worden pas verwerkt als ze compleet zijn. Gemiste
   regels na een herstart worden ingehaald tot 24 u terug; oudere worden enkel als
   WARNING gelogd om late of dubbele bestellingen te vermijden. De eerste keer
-  wordt geen historiek afgespeeld. De regel van vóór de eerste start na deze
-  update wordt dus niet ingehaald.
+  wordt geen historiek afgespeeld.
 
 ### Werkuren — naamverificatie
 - `wo_aanmaken.py`: de verwachte naam uit `config.json` stond dubbel verkeerd
