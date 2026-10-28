@@ -5,6 +5,34 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-10-28
+
+### CCS-containerbestelling — wachtrij en "precies één keer per event" (dubbele bestellingen)
+- Probleem: op zaterdag 24/10 werden containers 2.1 en 1.2 besteld (ESS + WO) en op
+  maandag 26/10 nog eens, terwijl die events al verwerkt waren. Oorzaak: een
+  bestelling kon op twee manieren starten (de log-watcher op de master én het
+  dashboard in de browser, 6 s nadat de groene herstel-popup verschijnt) en de
+  ontdubbeling zat enkel in het geheugen, per container en maximaal 10 minuten.
+  Een dashboard dat na het weekend opende, toonde de nog onbevestigde herstel-alerts
+  van zaterdag en bestelde dezelfde events opnieuw (de popups komen 6 s na elkaar,
+  vandaar 11:50:44 en 11:50:51). Daarnaast liepen twee containers parallel, elk met
+  een eigen browser en PeopleSoft-sessie.
+- **Wachtrij**: de watcher en het dashboard zetten bestellingen nu achteraan één
+  wachtrij; een worker voert ze na elkaar uit (FIFO), dus nooit meer twee
+  PeopleSoft-sessies tegelijk. Een wachtende bestelling blijft status `bezig`
+  houden, zodat de scraper-master niet herstart zolang er nog iets in de rij staat.
+- **Eén keer per event**: elk event wordt geïdentificeerd door zijn CCS-logregel
+  (bv. `24.10.2026 09:23:53 container 2.1 enabled`; de watcher en het dashboard geven
+  die beide mee). Wat er per event al gebeurd is, staat duurzaam in
+  `ccs_bestel_staat.json` (enkel de 20 recentste events per container; in `.gitignore`).
+  Is een event al volledig verwerkt, dan wordt een nieuwe trigger genegeerd
+  (WARNING in `app.log`: "dubbele trigger genegeerd"). Een nieuw event voor dezelfde
+  container wordt wel gewoon besteld.
+- Lukt de ESS-aanvraag maar faalt de werkorder daarna, dan bestelt een nieuwe poging
+  de ESS niet opnieuw: de ESS wordt meteen bewaard en enkel de WO wordt herhaald.
+- Events van vóór deze update staan niet in `ccs_bestel_staat.json`: een nog
+  onbevestigde herstel-alert van vóór de update kan dus één keer opnieuw bestellen.
+
 ## 2026-10-19
 
 ### CCS-containerbestelling — meerdere regels in dezelfde seconde

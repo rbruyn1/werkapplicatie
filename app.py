@@ -1561,7 +1561,78 @@ def api_ccs_skip_bestelling():
     return resp
 
 
-def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: str):
+# ── Wachtrij + "precies één keer per event" voor CCS-bestellingen ──────────────
+# Twee containers die kort na elkaar wisselen, mogen niet tegelijk een browser/
+# PeopleSoft-sessie openen: één worker verwerkt de bestellingen na elkaar (FIFO).
+# Daarnaast wordt per EVENT (de CCS-logregel, bv. "24.10.2026 09:23:53 container
+# 2.1 enabled") duurzaam bijgehouden wat al gebeurd is. Zo kan hetzelfde event
+# nooit twee keer besteld worden, ook niet als het later opnieuw getriggerd wordt
+# (dashboard dat na het weekend opent en nog onbevestigde herstel-alerts toont,
+# herstart van de app, mislukte poging, ...).
+import queue as _queue
+CCS_BESTEL_STAAT_PAD = Path(__file__).parent / "ccs_bestel_staat.json"
+_ccs_wachtrij = _queue.Queue()
+_ccs_worker_lock = threading.Lock()
+_ccs_worker_thread = None
+
+
+def _ccs_event_sleutel(event: str) -> str:
+    return " ".join((event or "").split()).lower()
+
+
+def _ccs_bestel_lees(container: str, event: str):
+    """Wat er al gebeurd is voor dit event: {tijd, ess_id, wo_id} of None."""
+    sleutel = _ccs_event_sleutel(event)
+    if not sleutel:
+        return None
+    return (_lees_json_veilig(CCS_BESTEL_STAAT_PAD, {}).get(container) or {}).get(sleutel)
+
+
+def _ccs_bestel_bewaar(container: str, event: str, **velden):
+    sleutel = _ccs_event_sleutel(event)
+    if not sleutel:
+        return
+    try:
+        data = _lees_json_veilig(CCS_BESTEL_STAAT_PAD, {})
+        per_container = data.setdefault(container, {})
+        rec = per_container.setdefault(sleutel, {"tijd": datetime.now().strftime("%d/%m/%Y %H:%M:%S")})
+        rec.update({k: v for k, v in velden.items() if v is not None})
+        for oud in sorted(per_container, key=lambda k: per_container[k].get("tijd", ""))[:-20]:
+            per_container.pop(oud, None)          # enkel de 20 recentste events per container
+        _schrijf_json_atomisch(CCS_BESTEL_STAAT_PAD, data)
+    except Exception as e:
+        log.error(f"CCS bestelstaat bewaren mislukt: {e}")
+
+
+def _ccs_worker():
+    while True:
+        container, maximo, job, dedup_key, event = _ccs_wachtrij.get()
+        try:
+            job["wachtrij"] = False
+            _voer_ccs_aanmaken_uit(container, maximo, job, dedup_key, event)
+        except Exception as e:                       # _voer_ccs_aanmaken_uit vangt zelf al bijna alles op
+            log.error(f"CCS wachtrij fout voor '{container}': {e}")
+            job["status"] = "fout"
+            job["resultaat"] = {"ok": False, "fout": str(e)}
+            if dedup_key:
+                app.config.pop(dedup_key, None)
+        finally:
+            _ccs_wachtrij.task_done()
+
+
+def _ccs_in_wachtrij(container: str, maximo: str, job: dict, dedup_key: str, event: str = ""):
+    """Zet een bestelling achteraan de wachtrij; de worker voert ze één voor één uit."""
+    global _ccs_worker_thread
+    with _ccs_worker_lock:
+        if _ccs_worker_thread is None or not _ccs_worker_thread.is_alive():
+            _ccs_worker_thread = threading.Thread(target=_ccs_worker, daemon=True, name="ccs-wachtrij")
+            _ccs_worker_thread.start()
+    job["wachtrij"] = True            # status blijft "bezig": dedup en herstart-wachten blijven dus kloppen
+    log.info(f"CCS bestelling in wachtrij: '{container}' ({_ccs_wachtrij.qsize()} voor in de rij)")
+    _ccs_wachtrij.put((container, maximo, job, dedup_key, event))
+
+
+def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: str, event: str = ""):
     """Gemeenschappelijke logica voor CCS ESS + WO aanmaken.
     Wordt gebruikt door zowel api_ccs_maak_wo (browser-trigger) als
     _trigger_ccs_wo_backend (log-watcher trigger).
@@ -1590,6 +1661,20 @@ def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: st
 
     log.info(f"CCS bestelling gestart door pc '{hostname}' — container={container}")
 
+    # ── Zelfde event al afgewerkt? Dan nooit opnieuw bestellen. ──
+    rec = _ccs_bestel_lees(container, event)
+    if rec and rec.get("wo_id"):
+        melding = (f"dubbele trigger genegeerd — dit event ({' '.join(event.split())}) is al verwerkt op "
+                   f"{rec.get('tijd')} (ESS {rec.get('ess_id') or '-'}, WO {rec['wo_id']})")
+        _stap_log(f"⏭ {melding}")
+        log.warning(f"CCS bestelling {container}: {melding}")
+        job["status"]    = "klaar"
+        job["resultaat"] = {"ok": True, "dubbel": True, "wo_id": rec["wo_id"],
+                            "ess_aanvraag_id": rec.get("ess_id")}
+        if dedup_key and app.config.get(dedup_key):
+            app.config[dedup_key]["status"] = "klaar"
+        return
+
     async def _aanmaken():
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(headless=PS_HEADLESS)
@@ -1605,7 +1690,12 @@ def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: st
                 skip_data      = _ccs_skip_lezen()
                 moet_overslaan = skip_data.get(groep, False)
 
-                if moet_overslaan:
+                if rec and rec.get("ess_id"):
+                    _stap_log(f"⏭ ESS niet opnieuw besteld: voor dit event bestaat al aanvraag {rec['ess_id']} "
+                              f"(eerdere poging) — enkel de werkorder wordt nog aangemaakt")
+                    ess_res = {"ok": True, "fout": None, "aanvraag_id": rec["ess_id"],
+                               "vat_info": _ess_vat_info(container), "hergebruikt": True}
+                elif moet_overslaan:
                     _stap_log(f"⏭ Automatische bestelling overgeslagen — toggle actief voor CCS {groep}.1/{groep}.2")
                     ess_res = {"ok": False, "fout": None, "aanvraag_id": None,
                                "vat_info": _ess_vat_info(container), "overgeslagen": True}
@@ -1619,8 +1709,13 @@ def _voer_ccs_aanmaken_uit(container: str, maximo: str, job: dict, dedup_key: st
                         _stap_log(f"⚠ ESS aanvraag mislukt: {ess_res['fout']} — WO wordt toch aangemaakt")
                     else:
                         _stap_log(f"✓ ESS aanvraag {ess_res['aanvraag_id']} aangemaakt")
+                        # Meteen bewaren: faalt de WO hierna, dan wordt bij een nieuwe poging
+                        # niet opnieuw besteld.
+                        _ccs_bestel_bewaar(container, event, ess_id=str(ess_res["aanvraag_id"]))
 
                 wo_res = await maak_wo_ccs_container(page, container, maximo, stap_log=_stap_log)
+                if wo_res.get("ok") and wo_res.get("wo_id"):
+                    _ccs_bestel_bewaar(container, event, wo_id=str(wo_res["wo_id"]))
                 wo_res["ess_aanvraag_id"] = ess_res.get("aanvraag_id")
                 wo_res["ess_ok"]          = ess_res["ok"]
                 wo_res["ess_fout"]        = ess_res.get("fout")
@@ -1658,6 +1753,7 @@ def api_ccs_maak_wo():
     payload   = request.get_json(force=True)
     container = payload.get("container", "").strip()   # bv. "container 1.1"
     maximo    = payload.get("maximo", "").strip()       # T-nummer CCS installatie
+    event     = str(payload.get("event", "")).strip()  # CCS-logregel van het event (voor "één keer per event")
 
     if not container or not maximo:
         return jsonify({"ok": False, "fout": "container en maximo zijn verplicht"}), 400
@@ -1676,12 +1772,7 @@ def api_ccs_maak_wo():
     app.config[f"ccs_job_{job_id}"] = job
     app.config[dedup_key] = {"job_id": job_id, "status": "bezig", "gestart": datetime.now()}
 
-    threading.Thread(
-        target=_voer_ccs_aanmaken_uit,
-        args=(container, maximo, job, dedup_key),
-        daemon=True,
-        name=f"ccs-wo-{container}",
-    ).start()
+    _ccs_in_wachtrij(container, maximo, job, dedup_key, event)
     return jsonify({"ok": True, "job_id": job_id})
 
 
@@ -2760,7 +2851,7 @@ def _container_uit_regel(regel: str) -> str | None:
     return None
 
 
-def _trigger_ccs_wo_backend(container: str):
+def _trigger_ccs_wo_backend(container: str, event: str = ""):
     """Start WO + ESS aanmaken vanuit de backend, zonder dat een browser open moet zijn."""
     try:
         cfg    = load_config()
@@ -2784,12 +2875,7 @@ def _trigger_ccs_wo_backend(container: str):
         app.config[dedup_key] = {"job_id": job_id, "status": "bezig", "gestart": datetime.now()}
         log.info(f"CCS backend trigger: starten voor '{container}', maximo='{maximo}', job_id={job_id}")
 
-        threading.Thread(
-            target=_voer_ccs_aanmaken_uit,
-            args=(container, maximo, job, dedup_key),
-            daemon=True,
-            name=f"ccs-wo-{container}",
-        ).start()
+        _ccs_in_wachtrij(container, maximo, job, dedup_key, event)
 
     except Exception as e:
         log.error(f"CCS backend trigger setup fout: {e}")
@@ -2870,7 +2956,7 @@ def sla_alert_op(naam: str, regel: str):
             alerts.append(herstel)
             _schrijf_json_atomisch(ALERTS_PATH, alerts)
             # ── Backend trigger: WO + ESS aanmaken zonder browser nodig ──
-            _trigger_ccs_wo_backend(container)
+            _trigger_ccs_wo_backend(container, regel)
             return
         if not container or "disabled" not in r:
             return

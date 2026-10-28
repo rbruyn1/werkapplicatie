@@ -1113,7 +1113,7 @@
     }
   }).catch(() => {});
 
-  async function maakCcsWerkorder(container) {
+  async function maakCcsWerkorder(container, event) {
     if (!CCS_MAXIMO) {
       dbgLog('CCS WO: geen maximo ingesteld in config.json (ccs_maximo) — overgeslagen');
       return;
@@ -1123,7 +1123,7 @@
       const res  = await fetch('/api/ccs/maak-wo', {
         method:  'POST',
         headers: {'Content-Type': 'application/json'},
-        body:    JSON.stringify({ container: container, maximo: CCS_MAXIMO }),
+        body:    JSON.stringify({ container: container, maximo: CCS_MAXIMO, event: event || '' }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -1305,7 +1305,7 @@
         popupBusy = false;
         // ── WO aanmaken voor container vervanging ──
         if (alert.ccs_container) {
-          maakCcsWerkorder(alert.ccs_container);
+          maakCcsWerkorder(alert.ccs_container, alert.regel);
         }
         setTimeout(verwerkPopupQueue, 400);
       }, 6000);
