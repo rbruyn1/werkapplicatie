@@ -1680,11 +1680,13 @@ async def maak_wo_service_rapport(rapport_id: str, stap_log=None, zet_uitgev: bo
             log("Stap 11: ✓ Oplossing aangevinkt")
 
             # ── 10. Werkuren ───────────────────────────────────────────────
-            if UITVOERDER == "rbruyn1":
-                actieve_users = [u for u in PS_USERS if u.get("oprid") == "rbruyn1"]
-                log(f"Stap 12: Indiener is rbruyn1 → enkel eigen uren invullen ({len(actieve_users)} lijn(en))")
-            else:
-                actieve_users = PS_USERS
+            actieve_users = [u for u in PS_USERS if u.get("oprid") == UITVOERDER]
+            log(f"Stap 12: Uitvoerder is {UITVOERDER} → enkel eigen uren invullen ({len(actieve_users)} lijn(en))")
+            if not actieve_users:
+                # Er moeten altijd uren ingevuld worden → terugvallen op rbruyn1
+                actieve_users = [u for u in PS_USERS if u.get("oprid") == "rbruyn1"] \
+                    or [{"oprid": "rbruyn1", "naam": ""}]
+                log(f"Stap 12: ⚠ '{UITVOERDER}' staat niet in werkuren_users → uren op rbruyn1")
             log(f"Stap 12: {len(actieve_users)} werkuren-gebruiker(s) invullen (uren='{uren_veld}', uit rapport: '{uren}')...")
             for idx, user in enumerate(actieve_users):
                 if idx == 0:

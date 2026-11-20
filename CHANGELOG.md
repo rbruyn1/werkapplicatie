@@ -15,6 +15,14 @@ historiek).
   `werkuren_users` in `config.json`; een onbekend account valt terug op `rbruyn1`, het
   account `sa_water` (master-scraper-PC) blijft `rbruyn1`.
 
+### Service rapporten — werkuren enkel op de uitvoerder
+- Voorheen werd bij een andere gebruiker dan `rbruyn1` een urenlijn ingevuld voor
+  **alle** gebruikers in `werkuren_users` (ook voor `rbruyn1`); enkel als de uitvoerder
+  `rbruyn1` was, werd het beperkt tot zijn eigen lijn.
+- Nu komt er altijd één urenlijn, voor de uitvoerder (het OPRID van de Windows-gebruiker).
+  Staat die niet in `werkuren_users`, dan worden de uren op `rbruyn1` gezet (met een
+  waarschuwing in de log), zodat er altijd uren ingevuld worden.
+
 ## 2026-10-28
 
 ### CCS-containerbestelling — wachtrij en "precies één keer per event" (dubbele bestellingen)
