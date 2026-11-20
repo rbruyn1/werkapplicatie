@@ -161,6 +161,10 @@
       <div class="log-item-naam">📦 Bijbestelde vaten (ESS)</div>
       <div class="log-item-info">Automatisch bij container-enabled</div>
     </div>
+    <div class="log-item" id="changelog-item" onclick="toonChangelog()">
+      <div class="log-item-naam">📝 Changelog</div>
+      <div class="log-item-info">Recente wijzigingen aan de applicatie</div>
+    </div>
   </div>
 
   <!-- Content: log viewer -->
@@ -249,6 +253,7 @@ function statusTekst(log) {
 function selecteerLog(id) {
   huidigLog = id;
   document.getElementById('ess-overzicht-item').classList.remove('active');
+  document.getElementById('changelog-item').classList.remove('active');
   renderSidebar();
   const lc = document.getElementById('log-content');
   lc.style.whiteSpace = '';
@@ -265,6 +270,7 @@ async function toonEssOverzicht() {
   if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
   huidigLog = null;
   renderSidebar();
+  document.getElementById('changelog-item').classList.remove('active');
   document.getElementById('ess-overzicht-item').classList.add('active');
   document.getElementById('log-empty').style.display   = 'none';
   document.getElementById('log-content').style.display = 'block';
@@ -298,6 +304,37 @@ async function toonEssOverzicht() {
       </div>`;
     }).join('');
     el.innerHTML = rijen;
+  } catch(e) {
+    toonFout(String(e));
+  }
+}
+
+// ── Changelog ──────────────────────────────────────────────────────────────────
+async function toonChangelog() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  huidigLog = null;
+  renderSidebar();
+  document.getElementById('ess-overzicht-item').classList.remove('active');
+  document.getElementById('changelog-item').classList.add('active');
+  document.getElementById('log-empty').style.display   = 'none';
+  const el = document.getElementById('log-content');
+  el.style.display = 'block';
+  el.style.whiteSpace = '';
+  el.style.padding = '';
+  document.getElementById('content-title').textContent = '📝 Changelog';
+  document.getElementById('content-meta').textContent  = '';
+  try {
+    const r = await fetch('/api/changelog');
+    const d = await r.json();
+    if (!d.ok) { toonFout(d.fout); return; }
+    el.innerHTML = d.tekst.split('\n').map(regel => {
+      const esc = regel.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      if (regel.startsWith('## '))  return `<span class="line-login"><strong>${esc}</strong></span>`;
+      if (regel.startsWith('### ')) return `<span class="line-stap"><strong>${esc}</strong></span>`;
+      return esc;
+    }).join('\n');
+    el.scrollTop = 0;
+    updateScrollBtn();
   } catch(e) {
     toonFout(String(e));
   }

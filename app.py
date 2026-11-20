@@ -3975,6 +3975,19 @@ def api_logs_lees(log_id):
         return jsonify({"ok": False, "fout": str(e)}), 500
 
 
+@app.route("/api/changelog")
+def api_changelog():
+    """Geeft de inhoud van CHANGELOG.md terug (voor de Logs-pagina)."""
+    pad = Path(__file__).parent / "CHANGELOG.md"
+    if not pad.exists():
+        return jsonify({"ok": False, "fout": "CHANGELOG.md niet gevonden"}), 404
+    try:
+        with open(pad, encoding="utf-8", errors="replace") as f:
+            return jsonify({"ok": True, "tekst": f.read()})
+    except Exception as e:
+        return jsonify({"ok": False, "fout": str(e)}), 500
+
+
 # ══════════════════════════════════════════════════════════════════
 # SHUTDOWN
 # ══════════════════════════════════════════════════════════════════

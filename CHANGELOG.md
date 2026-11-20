@@ -23,6 +23,10 @@ historiek).
   Staat die niet in `werkuren_users`, dan worden de uren op `rbruyn1` gezet (met een
   waarschuwing in de log), zodat er altijd uren ingevuld worden.
 
+### Logs — changelog lezen in de app
+- Op de Logs-pagina staat onder "Overzichten" een nieuw item "📝 Changelog" dat
+  `CHANGELOG.md` toont (nieuwe route `/api/changelog` in `app.py`).
+
 ## 2026-10-28
 
 ### CCS-containerbestelling — wachtrij en "precies één keer per event" (dubbele bestellingen)
