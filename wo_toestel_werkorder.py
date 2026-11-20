@@ -9,7 +9,7 @@ Flow:
   3. WO-type = AO, WO-bron = MAN
   4. Toestel opzoeken via verrekijker (verkortingsnummer → T-nummer via ptModFrame_0)
   5. Omschrijving (probleemmelding, max 50 tekens) invullen
-  6. Uitvoerder = rbruyn1
+  6. Uitvoerder = OPRID van de Windows-gebruiker (zie uitvoerder_utils)
   7. Eerste opslaan → INUITV
   8. Rapportage-tab → oplossing aanvinken → commentaar invullen → uren
   9. Indien zet_uitgev=True (standaard): status instellen op UITGEV
@@ -42,7 +42,8 @@ PS_BASE_URL  = _cfg.get("ps_base_url",
 PS_PSC_URL   = _cfg.get("ps_psc_url",
     "https://peoplesoftlogistiek.uz.kuleuven.ac.be/psc/FS9PROD/")
 PS_HEADLESS  = False
-OPRID        = "rbruyn1"
+from uitvoerder_utils import bepaal_uitvoerder
+OPRID        = bepaal_uitvoerder(_cfg, "rbruyn1")
 
 WO_NIEUW_URL = (
     PS_PSC_URL.rstrip("/") + "/"
@@ -363,7 +364,7 @@ async def maak_toestel_werkorder(t_nummer: str, probleemmelding: str,
             except Exception as e:
                 log(f"Stap 6: ⚠ Omschrijving mislukt: {e}")
 
-            # ── 7. Uitvoerder = rbruyn1 ────────────────────────────────────
+            # ── 7. Uitvoerder = OPRID van de gebruiker ────────────────────────────────────
             log(f"Stap 7: Uitvoerder ← '{OPRID}'")
             await page.click(uitvoerder_field)
             await asyncio.sleep(0.2)
