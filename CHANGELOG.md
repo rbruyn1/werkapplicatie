@@ -5,6 +5,16 @@ Dit bestand is gestart op 17/09/2026 — wijzigingen van vóór die datum staan
 niet met terugwerkende kracht vermeld (zie `git log` voor de volledige
 historiek).
 
+## 2026-11-20
+
+### Snelle werkorder — uitvoerder en werkuren op de echte gebruiker
+- Voorheen werd bij een snelle toestel-WO (`wo_toestel_werkorder.py`) het Uitvoerder-veld
+  en de werkuren altijd op `rbruyn1` gezet, ook als een andere gebruiker de WO aanmaakte.
+- Nu wordt het OPRID van de Windows-gebruiker gebruikt via `bepaal_uitvoerder()`
+  (`uitvoerder_utils.py`), zoals bij de RO-staalnamen. De gebruiker moet voorkomen in
+  `werkuren_users` in `config.json`; een onbekend account valt terug op `rbruyn1`, het
+  account `sa_water` (master-scraper-PC) blijft `rbruyn1`.
+
 ## 2026-10-28
 
 ### CCS-containerbestelling — wachtrij en "precies één keer per event" (dubbele bestellingen)
